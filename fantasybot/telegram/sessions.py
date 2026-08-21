@@ -14,7 +14,10 @@ from .. import auth
 from .. import config
 from ..api import FantasyClient, FantasyError
 
+import threading
+
 _PENDING_PKCE: Dict[int, Dict[str, Any]] = {}
+_REGISTRY_LOCK = threading.Lock()
 TELEGRAM_SESSIONS_DIR = os.path.join(config.ROOT, ".state", "telegram_users")
 
 
@@ -40,8 +43,17 @@ def load_user_tokens(chat_id: int) -> Optional[Dict[str, Any]]:
 
 def save_user_tokens(chat_id: int, tokens: Dict[str, Any]):
     path = _user_token_path(chat_id)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(tokens, f, indent=2)
+    tmp_path = f"{path}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(tokens, f, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 def delete_user_session(chat_id: int):
@@ -72,41 +84,48 @@ def _load_registry() -> Dict[str, Any]:
 
 def _save_registry(data: Dict[str, Any]):
     os.makedirs(os.path.dirname(REGISTRY_PATH), exist_ok=True)
+    tmp_path = f"{REGISTRY_PATH}.tmp"
     try:
-        with open(REGISTRY_PATH, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, REGISTRY_PATH)
     except Exception:
-        pass
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 def record_user_interaction(chat_id: int, user_obj: Optional[Dict[str, Any]] = None):
     """Records/updates a user's interaction in the bot's permanent user registry."""
-    reg = _load_registry()
-    cid_str = str(chat_id)
-    now_ts = int(time.time())
-    now_iso = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_ts))
+    with _REGISTRY_LOCK:
+        reg = _load_registry()
+        cid_str = str(chat_id)
+        now_ts = int(time.time())
+        now_iso = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_ts))
 
-    u_data = reg.get(cid_str, {
-        "chat_id": chat_id,
-        "first_seen": now_iso,
-        "interaction_count": 0,
-    })
+        u_data = reg.get(cid_str, {
+            "chat_id": chat_id,
+            "first_seen": now_iso,
+            "interaction_count": 0,
+        })
 
-    if user_obj:
-        if user_obj.get("username"):
-            u_data["username"] = user_obj["username"]
-        if user_obj.get("first_name"):
-            u_data["first_name"] = user_obj["first_name"]
-        if user_obj.get("last_name"):
-            u_data["last_name"] = user_obj["last_name"]
+        if user_obj:
+            if user_obj.get("username"):
+                u_data["username"] = user_obj["username"]
+            if user_obj.get("first_name"):
+                u_data["first_name"] = user_obj["first_name"]
+            if user_obj.get("last_name"):
+                u_data["last_name"] = user_obj["last_name"]
 
-    u_data["last_seen"] = now_iso
-    u_data["last_seen_ts"] = now_ts
-    u_data["interaction_count"] = u_data.get("interaction_count", 0) + 1
-    u_data["is_logged_in"] = is_user_logged_in(chat_id)
+        u_data["last_seen"] = now_iso
+        u_data["last_seen_ts"] = now_ts
+        u_data["interaction_count"] = u_data.get("interaction_count", 0) + 1
+        u_data["is_logged_in"] = is_user_logged_in(chat_id)
 
-    reg[cid_str] = u_data
-    _save_registry(reg)
+        reg[cid_str] = u_data
+        _save_registry(reg)
 
 
 def get_bot_usage_stats() -> Dict[str, Any]:

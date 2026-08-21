@@ -1,7 +1,13 @@
 """Telegram message formatting, emojis, and inline keyboard builders."""
 
+import html
 from typing import List, Dict, Any, Optional
 from ..matching import POS
+
+
+def h(val: Any) -> str:
+    """Safely escapes HTML special characters for Telegram parse_mode='HTML'."""
+    return html.escape(str(val or ""))
 
 
 def main_menu_keyboard(logged_in: bool = True) -> Dict[str, Any]:
@@ -264,7 +270,7 @@ def format_team(team_data: Dict[str, Any]) -> str:
     t_money = team_data.get("teamMoney", 0)
 
     lines = [
-        f"📋 <b>Mi Plantilla: {team_data.get('name', 'Equipo')}</b>",
+        f"📋 <b>Mi Plantilla: {h(team_data.get('name', 'Equipo'))}</b>",
         f"💰 <b>Valor:</b> {fmt_eur(t_val)}  |  🏦 <b>Saldo:</b> {fmt_eur(t_money)}",
         f"👥 <b>Total:</b> {len(players)} jugadores\n"
     ]
@@ -286,7 +292,7 @@ def format_team(team_data: Dict[str, Any]) -> str:
                 name = pm.get("nickname") or pm.get("name") or "Jugador"
                 mv = pm.get("marketValue") or 0
                 clause = p.get("buyoutClause") or 0
-                lines.append(f"• <b>{name}</b>: {fmt_eur(mv)} <i>(Cláusula: {fmt_eur(clause, compact=True)})</i>")
+                lines.append(f"• <b>{h(name)}</b>: {fmt_eur(mv)} <i>(Cláusula: {fmt_eur(clause, compact=True)})</i>")
             lines.append("")
 
     return "\n".join(lines)
@@ -299,7 +305,7 @@ def format_rivals_summary(rivals: List[Dict[str, Any]]) -> str:
 
     lines = [
         "⚔️ <b>Finanzas y Presupuesto de Rivales</b>",
-        f"📦 <i>Historial: {events_count} operaciones ({d_from} a {d_to})</i>\n"
+        f"📦 <i>Historial: {events_count} operaciones ({h(d_from)} a {h(d_to)})</i>\n"
     ]
 
     medals = ["🥇", "🥈", "🥉"]
@@ -313,7 +319,7 @@ def format_rivals_summary(rivals: List[Dict[str, Any]]) -> str:
         net_sign = "+" if net >= 0 else ""
 
         lines.append(
-            f"{badge} <b>{name}</b>{is_me}\n"
+            f"{badge} <b>{h(name)}</b>{is_me}\n"
             f"  • 💰 <b>Saldo Est.:</b> ~{fmt_eur(cash)}\n"
             f"  • 👥 <b>Plantilla:</b> {fmt_eur(tv)} ({len(r.get('players', []))} jug.)\n"
             f"  • 📈 <b>Neto Fichajes:</b> {net_sign}{fmt_eur(net)}\n"
@@ -326,7 +332,7 @@ def format_rivals_summary(rivals: List[Dict[str, Any]]) -> str:
 def format_rival_detail(r: Dict[str, Any]) -> str:
     profit_sign = "+" if r.get("net_profit", 0) >= 0 else ""
     lines = [
-        f"👤 <b>Rival: {r.get('manager_name')}</b> (#{r.get('position')} - {r.get('points', 0)} pts)",
+        f"👤 <b>Rival: {h(r.get('manager_name'))}</b> (#{r.get('position')} - {r.get('points', 0)} pts)",
         f"💰 <b>Valor Equipo:</b> {fmt_eur(r.get('team_value', 0))}  |  🏦 <b>Saldo Est.:</b> ~{fmt_eur(r.get('estimated_balance', 0))}",
         f"🛒 <b>Compras:</b> {fmt_eur(r.get('purchases', 0))}  |  🏷 <b>Ventas:</b> {fmt_eur(r.get('sales', 0))} ({profit_sign}{fmt_eur(r.get('net_profit', 0))})\n",
         "👥 <b>JUGADORES EN PLANTILLA:</b>\n"
@@ -343,12 +349,12 @@ def format_rival_detail(r: Dict[str, Any]) -> str:
             diff = p.get("diff", 0)
             diff_sign = "+" if diff >= 0 else ""
             if p.get("is_initial"):
-                lines.append(f"• <b>{name}</b> ({pos})\n  💵 Fichaje: <i>(Inicial)</i> → Vale: {fmt_eur(mv)}")
+                lines.append(f"• <b>{h(name)}</b> ({h(pos)})\n  💵 Fichaje: <i>(Inicial)</i> → Vale: {fmt_eur(mv)}")
             else:
                 bp = p.get("bought_price", 0)
                 roi = (diff / bp * 100) if bp else 0
                 lines.append(
-                    f"• <b>{name}</b> ({pos})\n"
+                    f"• <b>{h(name)}</b> ({h(pos)})\n"
                     f"  💵 Compra: {fmt_eur(bp)} → Vale: {fmt_eur(mv)}\n"
                     f"  📈 Ganancia: <b>{diff_sign}{fmt_eur(diff)}</b> ({roi:+.1f}%)"
                 )
@@ -361,7 +367,7 @@ def format_history_summary(report: Dict[str, Any]) -> str:
     managers = report.get("managers", [])
     lines = [
         "📊 <b>Ranking de Especulación y Rentabilidad (Flips)</b>",
-        f"📦 <i>{report.get('tracked_events', 0)} operaciones ({report.get('tracked_from')} a {report.get('tracked_to')})</i>\n"
+        f"📦 <i>{report.get('tracked_events', 0)} operaciones ({h(report.get('tracked_from'))} a {h(report.get('tracked_to'))})</i>\n"
     ]
 
     medals = ["🥇", "🥈", "🥉"]
@@ -376,7 +382,7 @@ def format_history_summary(report: Dict[str, Any]) -> str:
         roi = f"{m.get('avg_roi_pct', 0):+.1f}%" if flips else "-"
 
         lines.append(
-            f"{badge} <b>{name}</b>{is_me}\n"
+            f"{badge} <b>{h(name)}</b>{is_me}\n"
             f"  • 📈 <b>P&L Total:</b> {tot_sign}{fmt_eur(tot)}\n"
             f"  • 🔄 <b>Flips:</b> {flips} ops  |  🎯 <b>Win Rate:</b> {win}\n"
             f"  • 🚀 <b>ROI Medio:</b> {roi}\n"
@@ -392,7 +398,7 @@ def format_manager_history(m: Dict[str, Any]) -> str:
     unreal_sign = "+" if m.get("unrealized_profit", 0) >= 0 else ""
 
     lines = [
-        f"📊 <b>Historial de Trading: {m.get('manager_name')}</b> (#{m.get('position')} - {m.get('points', 0)} pts)",
+        f"📊 <b>Historial de Trading: {h(m.get('manager_name'))}</b> (#{m.get('position')} - {m.get('points', 0)} pts)",
         f"📈 <b>P&L Total:</b> {tot_sign}{fmt_eur(m.get('total_pnl', 0))}",
         f"  • Realizado (Flips cerrados): {real_sign}{fmt_eur(m.get('realized_profit', 0))}",
         f"  • Latente (En plantilla): {unreal_sign}{fmt_eur(m.get('unrealized_profit', 0))}\n"
@@ -404,7 +410,7 @@ def format_manager_history(m: Dict[str, Any]) -> str:
         for o in open_h:
             diff_sign = "+" if o.get("unrealized_profit", 0) >= 0 else ""
             lines.append(
-                f"• <b>{o['name']}</b> ({o['pos']})\n"
+                f"• <b>{h(o['name'])}</b> ({h(o['pos'])})\n"
                 f"  💵 Compra: {fmt_eur(o['buy_price'])} → Vale: {fmt_eur(o['market_value'])}\n"
                 f"  📈 Beneficio: <b>{diff_sign}{fmt_eur(o['unrealized_profit'])}</b> ({o['roi_pct']:+.1f}%)\n"
             )
@@ -415,7 +421,7 @@ def format_manager_history(m: Dict[str, Any]) -> str:
         for f in flips[:8]:
             diff_sign = "+" if f.get("profit", 0) >= 0 else ""
             lines.append(
-                f"• <b>{f['name']}</b> ({f['pos']})\n"
+                f"• <b>{h(f['name'])}</b> ({h(f['pos'])})\n"
                 f"  💵 {fmt_eur(f['buy_price'])} → {fmt_eur(f['sell_price'])}\n"
                 f"  💰 Ganancia: <b>{diff_sign}{fmt_eur(f['profit'])}</b> ({f['roi_pct']:+.1f}%)\n"
             )
@@ -426,7 +432,7 @@ def format_manager_history(m: Dict[str, Any]) -> str:
     if init_s:
         lines.append(f"📦 <b>VENTAS DE PLANTILLA INICIAL ({len(init_s)}):</b>")
         for s in init_s[:4]:
-            lines.append(f"• <b>{s['name']}</b> ({s['pos']}): {fmt_eur(s['sell_price'])} <i>({s['sell_date']})</i>")
+            lines.append(f"• <b>{h(s['name'])}</b> ({h(s['pos'])}): {fmt_eur(s['sell_price'])} <i>({h(s['sell_date'])})</i>")
         if len(init_s) > 4:
             lines.append(f"<i>...y {len(init_s) - 4} ventas más.</i>")
 
@@ -434,21 +440,21 @@ def format_manager_history(m: Dict[str, Any]) -> str:
 
 
 def format_scouting_card(s: Dict[str, Any]) -> str:
-    name = s.get("name", "Jugador")
-    pos = s.get("pos", "Jugador")
-    team = s.get("team", "LaLiga")
+    name = h(s.get("name", "Jugador"))
+    pos = h(s.get("pos", "Jugador"))
+    team = h(s.get("team", "LaLiga"))
     mv = s.get("market_value", 0)
     cur_pts = s.get("current_points", 0)
     cur_avg = s.get("current_avg", 0.0)
     last_pts = s.get("last_season_points", 0)
     last_avg = s.get("last_season_avg", 0.0)
-    tier = s.get("tier_badge", "")
-    starter = s.get("starter_status", "")
-    role_shift = s.get("role_shift", "")
-    evolution = s.get("evolution", "")
-    phys = s.get("physical_status", "")
-    efficiency = s.get("efficiency", "")
-    verdict = s.get("verdict", "")
+    tier = h(s.get("tier_badge", ""))
+    starter = h(s.get("starter_status", ""))
+    role_shift = h(s.get("role_shift", ""))
+    evolution = h(s.get("evolution", ""))
+    phys = h(s.get("physical_status", ""))
+    efficiency = h(s.get("efficiency", ""))
+    verdict = h(s.get("verdict", ""))
 
     lines = [
         f"🔍 <b>Informe de Scouting: {name}</b> ({pos})",
@@ -473,7 +479,7 @@ def format_scouting_card(s: Dict[str, Any]) -> str:
 
 
 def format_team_scouting_report(ts: Dict[str, Any]) -> str:
-    name = ts.get("team_name", "Mi Plantilla")
+    name = h(ts.get("team_name", "Mi Plantilla"))
     n_players = ts.get("total_players", 0)
     t_val = ts.get("total_val", 0)
     t_money = ts.get("team_money", 0)
@@ -492,27 +498,27 @@ def format_team_scouting_report(ts: Dict[str, Any]) -> str:
     ]
 
     if stars:
-        s_names = ", ".join([f"<b>{r['name']}</b> ({r['last_season_points']} pts)" for r in stars[:5]])
+        s_names = ", ".join([f"<b>{h(r['name'])}</b> ({r['last_season_points']} pts)" for r in stars[:5]])
         lines.append(f"🌟 <b>ESTRELLAS CONSOLIDADAS:</b>\n{s_names}\n")
 
     if invalids:
         inv_lines = []
         for r in invalids:
-            inv_lines.append(f"• <b>{r['name']}</b> ({r['pos']}): {r['physical_status']}")
+            inv_lines.append(f"• <b>{h(r['name'])}</b> ({h(r['pos'])}): {h(r['physical_status'])}")
         lines.append(f"🚑 <b>BAJAS Y SANCIONES ACTIVAS ({len(invalids)}):</b>\n" + "\n".join(inv_lines) + "\n")
 
     if risk:
         r_lines = []
         for r in risk:
             prob_str = f"{r['starting_prob']}%" if r['starting_prob'] is not None else "?"
-            r_lines.append(f"• <b>{r['name']}</b> ({r['pos']}): {r['last_season_points']} pts el año pasado → Hoy suplente ({prob_str})")
+            r_lines.append(f"• <b>{h(r['name'])}</b> ({h(r['pos'])}): {r['last_season_points']} pts el año pasado → Hoy suplente ({prob_str})")
         lines.append(f"⚠️ <b>JUGADORES EN RIESGO / PÉRDIDA DE ROL ({len(risk)}):</b>\n" + "\n".join(r_lines) + "\n")
 
     if emerging:
         em_lines = []
         for r in emerging:
             prob_str = f"{r['starting_prob']}%" if r['starting_prob'] is not None else "?"
-            em_lines.append(f"• <b>{r['name']}</b> ({r['pos']}): {prob_str} titular (sin minutos año pasado)")
+            em_lines.append(f"• <b>{h(r['name'])}</b> ({h(r['pos'])}): {prob_str} titular (sin minutos año pasado)")
         lines.append(f"🚀 <b>JUGADORES EMERGENTES / REVELACIÓN ({len(emerging)}):</b>\n" + "\n".join(em_lines) + "\n")
 
     lines.append("📋 <b>RESUMEN POR LÍNEAS:</b>")
@@ -527,7 +533,7 @@ def format_team_scouting_report(ts: Dict[str, Any]) -> str:
                 p_badge = f"{last_p} pts" if last_p > 0 else "Nuevo"
                 prob_s = f"{r['starting_prob']}%" if r['starting_prob'] is not None else "?"
                 emoji_v = "🟢" if "MUY" in r['verdict'] else ("🟡" if "ROTACIÓN" in r['verdict'] else "🔴")
-                lines.append(f"{emoji_v} <b>{r['name']}</b>: 🏆 {p_badge} | ⚡ {prob_s} | {fmt_eur(r['market_value'], compact=True)}")
+                lines.append(f"{emoji_v} <b>{h(r['name'])}</b>: 🏆 {p_badge} | ⚡ {prob_s} | {fmt_eur(r['market_value'], compact=True)}")
 
     lines.append("\n<i>💡 Pulsa en cualquier botón abajo para ver la ficha detallada de un jugador.</i>")
     return "\n".join(lines)
@@ -561,10 +567,10 @@ def format_market(market_items: List[Dict[str, Any]]) -> str:
             origin = "🏛 Mercado Libre"
         else:
             mgr = it.get("sellerTeam", {}).get("manager", {}).get("managerName") or "Rival"
-            origin = f"👤 Rival: {mgr}"
+            origin = f"👤 Rival: {h(mgr)}"
 
         lines.append(
-            f"• <b>{name}</b> ({pos}){pts_badge}\n"
+            f"• <b>{h(name)}</b> ({h(pos)}){pts_badge}\n"
             f"  💵 <b>Precio:</b> {fmt_eur(price)}  |  🔒 <b>Cláusula:</b> {fmt_eur(clause, compact=True)}\n"
             f"  🏷 <i>{origin}</i>\n"
         )
@@ -582,11 +588,11 @@ def format_trends(trends_list: List[Dict[str, Any]]) -> str:
         "🟢 <b>MAYORES SUBIDAS:</b>"
     ]
     for p in up:
-        lines.append(f"• <b>{p.get('nombre', 'Jugador')}</b> ({p.get('equipo', '')}): <b>+{fmt_eur(p.get('tendencia', 0))}/día 📈</b>")
+        lines.append(f"• <b>{h(p.get('nombre', 'Jugador'))}</b> ({h(p.get('equipo', ''))}): <b>+{fmt_eur(p.get('tendencia', 0))}/día 📈</b>")
 
     lines.append("\n🔴 <b>MAYORES BAJADAS:</b>")
     for p in down:
-        lines.append(f"• <b>{p.get('nombre', 'Jugador')}</b> ({p.get('equipo', '')}): <b>{fmt_eur(p.get('tendencia', 0))}/día 📉</b>")
+        lines.append(f"• <b>{h(p.get('nombre', 'Jugador'))}</b> ({h(p.get('equipo', ''))}): <b>{fmt_eur(p.get('tendencia', 0))}/día 📉</b>")
 
     return "\n".join(lines)
 
@@ -642,9 +648,9 @@ def format_admin_stats(stats: Dict[str, Any]) -> str:
         cnt = u.get("interaction_count", 1)
 
         lines.append(
-            f"{idx}. {status_icon} <b>{fname}</b> ({uname})\n"
+            f"{idx}. {status_icon} <b>{h(fname)}</b> ({h(uname)})\n"
             f"   🆔 <code>{cid}</code>  |  🔄 {cnt} interacciones\n"
-            f"   📅 Última actividad: <i>{last_s}</i>\n"
+            f"   📅 Última actividad: <i>{h(last_s)}</i>\n"
         )
 
     if len(users) > 20:

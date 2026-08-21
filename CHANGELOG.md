@@ -111,3 +111,14 @@ All notable changes to the **fantasybot** project for rival tracking, transfer a
 
 #### 12. Documentation (`README.md`, `CHANGELOG.md`)
 - Complete documentation of multi-season scouting, proactive notifications, and administration commands.
+
+### Fixed & Security Hardening
+
+- **CLI Watch Command Architecture (`fantasybot/cli.py`)**: Restored clean lifecycle for `cmd_watch` (Ctrl+C event loop, browser launcher, background daemon threads) and separated `cmd_scout`, `cmd_stats`, and `cmd_telegram` into dedicated top-level functions.
+- **Activity Pagination & Network Safety (`fantasybot/api.py`)**: Capped activity scraping at 100 pages, verified list types, and re-raised exceptions on initial page load to prevent state corruption while gracefully handling network hiccups on subsequent pages.
+- **Null Safety in Flips (`fantasybot/strategy/flip.py`)**: Added defensive `.get()` chaining on `playerTeam` and `sellerTeam` to prevent `NoneType` crashes during market scans.
+- **Chronological FIFO Lot Matching (`fantasybot/strategy/history.py`)**: Rebuilt trade matching with an ordered open buy lot queue, ensuring accurate P&L calculation and properly distinguishing day 1 squad sales from realized flips.
+- **Player Cache Hygiene (`fantasybot/strategy/history.py`)**: Fixed `None` check to avoid caching `"None"` keys, and prevented persistent disk storage of placeholder names on network failures.
+- **Incremental Traffic Optimization (`fantasybot/strategy/rivals.py`)**: Switched to page 0 incremental polling for leagues with existing local history, substantially reducing HTTP request volume.
+- **Thread Safety & Atomic Persistence (`fantasybot/state.py`, `fantasybot/telegram/sessions.py`)**: Added mutex locking on user registries and atomic file replacement (`.tmp` + `os.replace`) to guarantee data integrity across concurrent Telegram requests.
+- **Telegram HTML Sanitization (`fantasybot/telegram/ui.py`, `fantasybot/telegram/bot.py`)**: Wrapped all dynamic manager, player, team, and feedback strings with `html.escape` to eliminate Telegram 400 Bad Request parsing errors.

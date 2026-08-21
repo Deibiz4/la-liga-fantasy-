@@ -3,6 +3,7 @@
 Zero external pip dependencies: built with Python standard library (urllib.request, json, threading).
 """
 
+import html
 import json
 import logging
 import os
@@ -1141,13 +1142,14 @@ class TelegramBot:
         if admin_id:
             try:
                 uname = user_info.get("username")
-                u_str = f"@{uname}" if uname else f"ID: {chat_id}"
+                u_str = f"@{html.escape(uname)}" if uname else f"ID: {chat_id}"
+                fname = html.escape(user_info.get("first_name") or "Usuario")
                 admin_msg = (
                     f"📩 <b>Nuevo Reporte en el Bot</b>\n\n"
-                    f"👤 <b>De:</b> {user_info.get('first_name', 'Usuario')} ({u_str})\n"
+                    f"👤 <b>De:</b> {fname} ({u_str})\n"
                     f"🏷 <b>Tipo:</b> {emoji} <b>{report_type}</b>\n"
                     f"📅 <b>Fecha:</b> {entry['date']}\n\n"
-                    f"💬 <b>Mensaje:</b>\n<i>{content.strip()}</i>"
+                    f"💬 <b>Mensaje:</b>\n<i>{html.escape(content.strip())}</i>"
                 )
                 self.send_message(int(admin_id), admin_msg)
             except Exception as e:
@@ -1177,8 +1179,9 @@ class TelegramBot:
         for idx, item in enumerate(items[-15:], 1):
             emoji = "🐛" if item.get("type") == "BUG" else "💡"
             u_name = item.get("username")
-            u_str = f"@{u_name}" if u_name else f"ID: {item.get('chat_id')}"
-            lines.append(f"{idx}. {emoji} <b>[{item.get('type')}]</b> de {u_str} ({item.get('date')})\n   <i>\"{item.get('message')}\"</i>\n")
+            u_str = f"@{html.escape(u_name)}" if u_name else f"ID: {item.get('chat_id')}"
+            msg_txt = html.escape(str(item.get("message") or ""))
+            lines.append(f"{idx}. {emoji} <b>[{item.get('type')}]</b> de {u_str} ({item.get('date')})\n   <i>\"{msg_txt}\"</i>\n")
 
         self.send_message(chat_id, "\n".join(lines), reply_markup=ui.back_to_menu_keyboard())
 
