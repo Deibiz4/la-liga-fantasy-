@@ -67,11 +67,21 @@ def last_minute_bid(league_id, market_id, max_bid, value=None, final=DEFAULT_FIN
         log(f"[bid] marketId {market_id} is not in the market (already closed?).")
         return None
     if value is None:
-        value = el.get("salePrice") or el["playerMaster"].get("marketValue")
+        # Bid at LEAST the player's CURRENT market value. A system auction keeps its listing
+        # `salePrice` FROZEN, but a player's value is re-valued daily; once the value climbs
+        # above the frozen salePrice, LaLiga rejects any bid below the new value ("can't bid
+        # below the player's value"). So the floor is the HIGHER of the two, never the
+        # (possibly stale, lower) salePrice alone.
+        sale = el.get("salePrice") or 0
+        mval = (el.get("playerMaster") or {}).get("marketValue") or 0
+        value = max(sale, mval) or None
     close_iso = el.get("expirationDate")
     nombre = el["playerMaster"].get("nickname", market_id)
     if not close_iso:
         log(f"[bid] {nombre}: no close date; can't time it. Done.")
+        return None
+    if not value:  # no usable price -> can't size a bid (and would crash the f-string below)
+        log(f"[bid] {nombre}: no market value; can't price a bid.")
         return None
     log(f"[bid] {nombre}: value={value:,} cap={max_bid:,} close={close_iso}")
 
