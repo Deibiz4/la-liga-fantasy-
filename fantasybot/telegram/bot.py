@@ -1153,7 +1153,20 @@ class TelegramBot:
             except Exception as e:
                 logger.error("Failed to forward report to admin: %s", e)
 
+    def _is_admin(self, chat_id: int) -> bool:
+        admin_id = os.environ.get("TELEGRAM_ADMIN_CHAT_ID")
+        if admin_id and str(chat_id) == str(admin_id).strip():
+            return True
+        # Developer / creator chat ID
+        if str(chat_id) == "351138675":
+            return True
+        return False
+
     def cmd_admin_feedback(self, chat_id: int):
+        if not self._is_admin(chat_id):
+            self.send_message(chat_id, "⛔ <b>Acceso Restringido:</b> Este comando está reservado exclusivamente para el administrador del bot.")
+            return
+
         from . import feedback
         items = feedback.load_all_feedback()
         if not items:
@@ -1170,6 +1183,10 @@ class TelegramBot:
         self.send_message(chat_id, "\n".join(lines), reply_markup=ui.back_to_menu_keyboard())
 
     def cmd_admin_stats(self, chat_id: int):
+        if not self._is_admin(chat_id):
+            self.send_message(chat_id, "⛔ <b>Acceso Restringido:</b> Este comando está reservado exclusivamente para el administrador del bot.")
+            return
+
         stats = sessions.get_bot_usage_stats()
         text = ui.format_admin_stats(stats)
         self.send_message(chat_id, text, reply_markup=ui.back_to_menu_keyboard())

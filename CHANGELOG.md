@@ -73,12 +73,41 @@ All notable changes to the **fantasybot** project for rival tracking, transfer a
   - Admin inbox viewer command (`/reportes` / `/admin_feedback`).
 - **Zero External Dependencies**: Pure Python standard library implementation (`urllib.request`, `json`, `threading`).
 
-#### 7. LLM Agent Integration (`fantasybot/agent.py`)
+#### 7. Player Scouting & Multi-Season Historical Intelligence (`fantasybot/strategy/scouting.py`)
+- **Multi-Season Historical Scoring**: Extracts and evaluates `lastSeasonPoints` and per-gameweek scoring rhythm from master player catalogs.
+- **Historical Tier Classification**: 🌟 *Estrella Top LaLiga* (>220 pts), 🛡️ *Titular Fijo Consolidado* (150-219 pts), 🔄 *Jugador de Rotación* (80-149 pts), 🪑 *Suplente / Secundario* (<80 pts), 🆕 *Sin Registro / Debutante*.
+- **Scoring Evolution & Trajectory**: Analyzes real-time season scoring pace vs past season baseline (*En Clara Ascensión +X%*, *En Declive*, *Rendimiento Estable*).
+- **Role Shift & Starter Detection**: Cross-references FutbolFantasy lineups (0-95%) to detect established players losing starter status or emergent breakout starters.
+- **Physical Fitness & Availability**: Flags medical injuries (`playerStatus: injured`), doubts, and discipline expulsions/suspensions.
+- **Economic Efficiency (€/pt)** and **Tactical Recommendation Verdicts** (🟢 *Muy Recomendable*, 🟡 *Rotación / Especulación*, 🔴 *Evitar / No Recomendable*).
+- **Whole-Squad Scouting Audit (`analyze_team_squad`)**: Full-squad audit evaluating total past season output, squad stars, fitness risk, and line-by-line overview.
+- **Telegram & CLI Integration**:
+  - `/scout <jugador>` / `/player <jugador>`: Instant deep-dive scouting dossier for any LaLiga footballer.
+  - `/scout_team`: Full squad audit with quick-tap individual player scouting buttons.
+  - Live Market (`/market`) and Flips (`/flip`) enriched with past season point badges and direct interactive scout buttons.
+  - CLI commands `python -m fantasybot scout <jugador>` and `python -m fantasybot scout --team`.
+
+#### 8. Proactive Notification & Alert System (`fantasybot/telegram/notifications.py`)
+- **Daily Market Reset Alert**: Proactive morning notification whenever the league launches a new batch of player auctions.
+- **Squad Injury & Fitness Doubt Alerts**: Real-time alerts when a squad member transitions to injured, doubtful, or medical recovery.
+- **Squad Red Card / Suspension Alerts**: Immediate alerts on player expulsions and disciplinary sanctions.
+- **Live Match Points Increments (`+X pts`) & Matchday Rewards**: Notifies incremental points gained by squad players during live matches and official matchday payout distribution.
+- **Gameweek Kickoff Countdown Alert (~6 Hours Before)**: Proactive matchday eve reminder with:
+  - 🚨 **Critical Negative Balance Warning**: Urges managers with negative balances to sell a player before the kickoff deadline to avoid a 0-point penalty.
+  - ⚽ **Lineup Audit**: Compares current XI with AI optimal lineup and provides a 1-tap apply button.
+- **Interactive Preference Toggles (`/settings`)**: Full user control over every individual notification category.
+
+#### 9. Admin Usage Analytics & User Registry (`fantasybot/telegram/sessions.py`)
+- **Permanent User Registry (`.state/telegram_registry.json`)**: Tracks unique Telegram users, `@username`, first name, interaction counts, and last active timestamps.
+- **Admin Access Control**: `/stats` (or `/usuarios` / `/admin_stats`) and `/reportes` restricted exclusively to authorized bot administrator (`TELEGRAM_ADMIN_CHAT_ID` / developer ID `351138675`).
+- **CLI Analytics**: `python -m fantasybot stats` for terminal-based user adoption statistics.
+
+#### 10. LLM Agent Integration (`fantasybot/agent.py`)
 - Included league rival financial data and clause increases into `review()` dictionary and CLI summary output.
 
-#### 8. Unit Tests (`tests/test_rivals.py`, `tests/test_history.py`, `tests/test_telegram.py`)
-- Added comprehensive unit tests covering activity parsing, clause protection analysis, rival accounting, trade ROI, and Telegram sessions/UI.
-- All **56/56 unit tests** passing in test suite.
+#### 11. Unit Tests (`tests/test_rivals.py`, `tests/test_history.py`, `tests/test_telegram.py`, `tests/test_scouting.py`, `tests/test_alert_notifications.py`)
+- Added comprehensive unit test suites covering rival accounting, historical scouting, alert notifications, and multi-user administration.
+- All **70/70 unit tests** passing (100% OK).
 
-#### 9. Documentation (`README.md`)
-- Updated README with usage instructions for `rivals`, `history`, and `telegram`, plus attribution credits to original author Jon Ortega.
+#### 12. Documentation (`README.md`, `CHANGELOG.md`)
+- Complete documentation of multi-season scouting, proactive notifications, and administration commands.
