@@ -150,6 +150,9 @@ class TelegramBot:
         if not chat_id:
             return
 
+        # Record activity in registry
+        sessions.record_user_interaction(chat_id, msg.get("from"))
+
         # Check for successful payment
         if "successful_payment" in msg:
             self.handle_successful_payment(msg)
@@ -204,6 +207,8 @@ class TelegramBot:
             self.cmd_sell_menu(chat_id)
         elif text.startswith("/reportes") or text.startswith("/admin_feedback"):
             self.cmd_admin_feedback(chat_id)
+        elif text.startswith("/stats") or text.startswith("/admin_stats") or text.startswith("/usuarios"):
+            self.cmd_admin_stats(chat_id)
         elif text.startswith("/me"):
             self.cmd_me(chat_id)
         elif text.startswith("/id") or text.startswith("/myid"):
@@ -242,6 +247,8 @@ class TelegramBot:
 
         if not chat_id:
             return
+
+        sessions.record_user_interaction(chat_id, cb.get("from"))
 
         if data == "cmd_menu":
             self.cmd_start(chat_id, message_id=message_id)
@@ -1161,6 +1168,11 @@ class TelegramBot:
             lines.append(f"{idx}. {emoji} <b>[{item.get('type')}]</b> de {u_str} ({item.get('date')})\n   <i>\"{item.get('message')}\"</i>\n")
 
         self.send_message(chat_id, "\n".join(lines), reply_markup=ui.back_to_menu_keyboard())
+
+    def cmd_admin_stats(self, chat_id: int):
+        stats = sessions.get_bot_usage_stats()
+        text = ui.format_admin_stats(stats)
+        self.send_message(chat_id, text, reply_markup=ui.back_to_menu_keyboard())
 
     # --- Polling Loop ---
 

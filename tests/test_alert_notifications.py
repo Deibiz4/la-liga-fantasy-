@@ -143,6 +143,45 @@ class TestAlertNotifications(unittest.TestCase):
         self.assertIn("Lewandowski", msg_text)
         self.assertIn("Valverde", msg_text)
 
+    def test_gameweek_6h_reminder(self):
+        from unittest.mock import patch
+        from datetime import datetime, timezone, timedelta
+
+        # Set next gameweek kickoff 3 hours in the future (inside the 6h window)
+        now = datetime.now(timezone.utc)
+        future_3h = (now + timedelta(hours=3)).isoformat()
+
+        team_data = {
+            "teamMoney": -2_500_000,
+            "players": [
+                {"playerMaster": {"id": "1", "nickname": "Courtois", "positionId": 1, "marketValue": 10_000_000}},
+                {"playerMaster": {"id": "2", "nickname": "Rudiger", "positionId": 2, "marketValue": 10_000_000}},
+            ]
+        }
+        settings = sessions.get_user_settings(self.chat_id)
+        mock_client = MagicMock()
+
+        with patch("fantasybot.sources.matchday.next_gameweek_kickoff", return_value=future_3h):
+            with patch("fantasybot.strategy.lineup.optimize", return_value={"formation": (4, 4, 2), "xi": []}):
+                with patch("fantasybot.agent._current_xi_ids", return_value=["1"]):
+                    notifications._check_gameweek_reminder(self.mock_bot, self.chat_id, mock_client, "l1", "t1", team_data, settings)
+
+        self.mock_bot.send_message.assert_called_once()
+        msg_text = self.mock_bot.send_message.call_args[0][1]
+        self.assertIn("AVISO DE JORNADA", msg_text)
+        self.assertIn("SALDO NEGATIVO DETECTADO", msg_text)
+
+    def test_user_registry_and_stats(self):
+        sessions.record_user_interaction(111, {"username": "user1", "first_name": "Alice"})
+        sessions.record_user_interaction(222, {"username": "user2", "first_name": "Bob"})
+
+        stats = sessions.get_bot_usage_stats()
+        self.assertGreaterEqual(stats["total_telegram_users"], 2)
+        formatted = ui.format_admin_stats(stats)
+        self.assertIn("Panel de Estadísticas", formatted)
+        self.assertIn("Alice", formatted)
+        self.assertIn("Bob", formatted)
+
 
 if __name__ == "__main__":
     unittest.main()

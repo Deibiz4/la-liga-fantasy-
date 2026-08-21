@@ -639,6 +639,21 @@ def cmd_scout(args):
     print(f"Verdict: {s['verdict']}\n")
 
 
+def cmd_stats(args):
+    """View bot usage statistics and registered users."""
+    from .telegram import sessions
+    stats = sessions.get_bot_usage_stats()
+    print("\n--- BOT USAGE & ADOPTION STATS ---")
+    print(f"Total Telegram Users: {stats['total_telegram_users']}")
+    print(f"Connected Fantasy Accounts: {stats['total_logged_in_users']}")
+    print("\nUsers List:")
+    for idx, u in enumerate(stats.get("users", []), 1):
+        status = "LOGGED IN" if u.get("is_logged_in") else "NOT LOGGED IN"
+        uname = f"@{u['username']}" if u.get("username") else "no alias"
+        print(f"  {idx}. {u.get('first_name', 'User')} ({uname}) | ID: {u['chat_id']} | Status: {status} | Last seen: {u.get('last_seen', '-')}")
+    print()
+
+
 def cmd_telegram(args):
     """Run the multi-user Telegram Bot daemon."""
     from .telegram.bot import run_bot
@@ -805,6 +820,8 @@ def build_parser():
     sc.add_argument("player", nargs="?", default=None, help="player name, nickname or ID")
     sc.add_argument("--team", action="store_true", help="scout your entire squad")
     sc.set_defaults(func=cmd_scout)
+
+    sub.add_parser("stats", help="view bot usage statistics and registered users").set_defaults(func=cmd_stats)
 
     return p
 

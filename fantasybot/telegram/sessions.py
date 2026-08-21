@@ -57,6 +57,88 @@ def is_user_logged_in(chat_id: int) -> bool:
     return load_user_tokens(chat_id) is not None
 
 
+REGISTRY_PATH = os.path.join(config.ROOT, ".state", "telegram_registry.json")
+
+
+def _load_registry() -> Dict[str, Any]:
+    if not os.path.exists(REGISTRY_PATH):
+        return {}
+    try:
+        with open(REGISTRY_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_registry(data: Dict[str, Any]):
+    os.makedirs(os.path.dirname(REGISTRY_PATH), exist_ok=True)
+    try:
+        with open(REGISTRY_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def record_user_interaction(chat_id: int, user_obj: Optional[Dict[str, Any]] = None):
+    """Records/updates a user's interaction in the bot's permanent user registry."""
+    reg = _load_registry()
+    cid_str = str(chat_id)
+    now_ts = int(time.time())
+    now_iso = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now_ts))
+
+    u_data = reg.get(cid_str, {
+        "chat_id": chat_id,
+        "first_seen": now_iso,
+        "interaction_count": 0,
+    })
+
+    if user_obj:
+        if user_obj.get("username"):
+            u_data["username"] = user_obj["username"]
+        if user_obj.get("first_name"):
+            u_data["first_name"] = user_obj["first_name"]
+        if user_obj.get("last_name"):
+            u_data["last_name"] = user_obj["last_name"]
+
+    u_data["last_seen"] = now_iso
+    u_data["last_seen_ts"] = now_ts
+    u_data["interaction_count"] = u_data.get("interaction_count", 0) + 1
+    u_data["is_logged_in"] = is_user_logged_in(chat_id)
+
+    reg[cid_str] = u_data
+    _save_registry(reg)
+
+
+def get_bot_usage_stats() -> Dict[str, Any]:
+    """Returns analytics on bot adoption, total users, logged-in accounts and alerts."""
+    reg = _load_registry()
+    all_logged_in = get_all_logged_in_chat_ids()
+
+    # Sync logged-in state in registry
+    for cid in all_logged_in:
+        cid_str = str(cid)
+        if cid_str not in reg:
+            reg[cid_str] = {
+                "chat_id": cid,
+                "first_seen": "Desconocido",
+                "last_seen": "Reciente",
+                "interaction_count": 1,
+            }
+        reg[cid_str]["is_logged_in"] = True
+
+    users_list = list(reg.values())
+    users_list.sort(key=lambda x: x.get("last_seen_ts", 0), reverse=True)
+
+    total_telegram = len(users_list)
+    total_logged_in = len(all_logged_in)
+
+    return {
+        "total_telegram_users": total_telegram,
+        "total_logged_in_users": total_logged_in,
+        "users": users_list,
+    }
+
+
 def get_user_settings(chat_id: int) -> Dict[str, bool]:
     tokens = load_user_tokens(chat_id) or {}
     settings = tokens.get("settings", {})
@@ -66,6 +148,7 @@ def get_user_settings(chat_id: int) -> Dict[str, bool]:
         "notify_injuries": settings.get("notify_injuries", True),
         "notify_expulsions": settings.get("notify_expulsions", True),
         "notify_player_points": settings.get("notify_player_points", True),
+        "notify_gameweek_6h": settings.get("notify_gameweek_6h", True),
         "notify_lineup": settings.get("notify_lineup", True),
         "auto_lineup": settings.get("auto_lineup", False),
     }
@@ -81,6 +164,7 @@ def toggle_user_setting(chat_id: int, key: str) -> Dict[str, bool]:
         "notify_expulsions",
         "notify_player_points",
         "notify_matchday_points",
+        "notify_gameweek_6h",
         "notify_lineup",
     ))
     cur_val = settings.get(key, default_on)

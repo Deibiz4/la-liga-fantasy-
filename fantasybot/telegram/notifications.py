@@ -30,6 +30,7 @@ _LAST_SEEN_MARKET_BATCH: Dict[int, Set[str]] = {}
 _LAST_PROCESSED_WEEK: Dict[int, int] = {}
 _LAST_SEEN_PLAYER_STATUS: Dict[int, Dict[str, Dict[str, Any]]] = {}
 _LAST_SEEN_PLAYER_POINTS: Dict[int, Dict[str, int]] = {}
+_LAST_SEEN_GW_REMINDER: Dict[int, str] = {}
 
 
 def start_notification_worker(bot_instance):
@@ -94,7 +95,11 @@ def _check_user_notifications(bot, chat_id: int):
     if settings.get("notify_flips", True) and team_data:
         _check_market_flips(bot, chat_id, client, lid, team_data)
 
-    # 5. Auto-Lineup Automation
+    # 5. Gameweek 6-Hour Countdown Alert & Negative Balance Warning
+    if settings.get("notify_gameweek_6h", True) and team_data:
+        _check_gameweek_reminder(bot, chat_id, client, lid, tid, team_data, settings)
+
+    # 6. Auto-Lineup Automation
     if settings.get("auto_lineup", False) and team_data:
         _check_auto_lineup(bot, chat_id, client, lid, tid, team_data)
 
@@ -366,6 +371,71 @@ def _check_market_flips(bot, chat_id: int, client, lid: Any, team_data: Dict[str
             bot.send_message(chat_id, "\n".join(lines))
     except Exception as e:
         logger.debug("Error checking market flips for %d: %s", chat_id, e)
+
+
+def _check_gameweek_reminder(bot, chat_id: int, client, lid: Any, tid: Any, team_data: Dict[str, Any], settings: Dict[str, bool]):
+    """Sends a proactive smart alert ~6 hours before the upcoming gameweek kickoff deadline."""
+    if not settings.get("notify_gameweek_6h", True):
+        return
+
+    try:
+        from ..sources import matchday
+        from datetime import datetime, timezone
+        gw_kickoff_iso = matchday.next_gameweek_kickoff()
+        if not gw_kickoff_iso:
+            return
+
+        iso_clean = gw_kickoff_iso.replace("Z", "+00:00")
+        kickoff_dt = datetime.fromisoformat(iso_clean)
+        if kickoff_dt.tzinfo is None:
+            kickoff_dt = kickoff_dt.replace(tzinfo=timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        time_left_sec = (kickoff_dt - now).total_seconds()
+
+        # Alert window: between 0 and 6 hours (+10 min buffer)
+        if 0 < time_left_sec <= (6 * 3600 + 600):
+            last_notified = _LAST_SEEN_GW_REMINDER.get(chat_id)
+            if last_notified == gw_kickoff_iso:
+                return
+
+            _LAST_SEEN_GW_REMINDER[chat_id] = gw_kickoff_iso
+
+            hours_left = max(1, int(round(time_left_sec / 3600.0)))
+            money = team_data.get("teamMoney", 0)
+
+            lines = [
+                f"⏰ <b>¡AVISO DE JORNADA: Faltan ~{hours_left}h para el Inicio!</b> ⚽",
+                f"📅 <b>Límite Alineación:</b> {kickoff_dt.strftime('%d/%m a las %H:%M UTC')}\n"
+            ]
+
+            if money < 0:
+                lines.append(
+                    f"🚨 <b>¡SALDO NEGATIVO DETECTADO! ({ui.fmt_eur(money)})</b>\n"
+                    f"⚠️ <i>Recuerda que si estás en números rojos al arrancar el primer partido, NO sumarás ningún punto esta jornada. ¡Vende a algún jugador antes del cierre!</i>\n"
+                )
+            else:
+                lines.append(f"💰 <b>Tu Saldo:</b> {ui.fmt_eur(money)} (Positivo ✅)\n")
+
+            # Check lineup status
+            best = lineup_opt.optimize(team_data)
+            current_ids = agent_mod._current_xi_ids(client, tid)
+            best_ids = set(p["playerMaster"]["id"] for p in best["xi"])
+            if set(current_ids) == best_ids:
+                d, m, f = best["formation"]
+                lines.append(f"⚽ <b>Alineación:</b> Tu XI actual ya coincide con el óptimo ({d}-{m}-{f}) ✅")
+            else:
+                d, m, f = best["formation"]
+                lines.append(
+                    f"⚠️ <b>Recomendación de Once:</b> Hay mejoras posibles respecto a tu XI actual.\n"
+                    f"El XI Óptimo sugerido es un <b>{d}-{m}-{f}</b>."
+                )
+
+            lines.append("\n<i>👉 Escribe /lineup para revisar tu equipo o /autopilot para optimizarlo al instante.</i>")
+
+            bot.send_message(chat_id, "\n".join(lines), reply_markup=ui.lineup_keyboard(can_apply=True))
+    except Exception as e:
+        logger.debug("Error checking gameweek reminder for %d: %s", chat_id, e)
 
 
 def _check_auto_lineup(bot, chat_id: int, client, lid: Any, tid: Any, team_data: Dict[str, Any]):

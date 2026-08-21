@@ -163,6 +163,7 @@ def settings_keyboard(settings: Dict[str, bool]) -> Dict[str, Any]:
     exp_txt = "ACTIVADO 🟥" if settings.get("notify_expulsions", True) else "DESACTIVADO 🔕"
     pts_txt = "ACTIVADO ⚽" if (settings.get("notify_player_points", True) or settings.get("notify_matchday_points", True)) else "DESACTIVADO 🔕"
     f_txt = "ACTIVADAS 🔔" if settings.get("notify_flips", True) else "DESACTIVADAS 🔕"
+    gw_txt = "ACTIVADO ⏳" if settings.get("notify_gameweek_6h", True) else "DESACTIVADO 🔕"
     l_txt = "ACTIVADO ⏰" if settings.get("notify_lineup", True) else "DESACTIVADO 🔕"
     a_txt = "ACTIVADO 🤖" if settings.get("auto_lineup", False) else "DESACTIVADO ⏸"
     return {
@@ -171,6 +172,7 @@ def settings_keyboard(settings: Dict[str, bool]) -> Dict[str, Any]:
             [{"text": f"🚑 Alerta de Lesiones: {inj_txt}", "callback_data": "toggle_notify_injuries"}],
             [{"text": f"🟥 Alerta de Sanciones / Expulsión: {exp_txt}", "callback_data": "toggle_notify_expulsions"}],
             [{"text": f"⚽ Puntos de Jugadores (Partido): {pts_txt}", "callback_data": "toggle_notify_player_points"}],
+            [{"text": f"⏳ Alerta 6h Inicio Jornada: {gw_txt}", "callback_data": "toggle_notify_gameweek_6h"}],
             [{"text": f"🔔 Chollos de Reventa (Flips): {f_txt}", "callback_data": "toggle_notify_flips"}],
             [{"text": f"⏰ Recordatorio de Alineación: {l_txt}", "callback_data": "toggle_notify_lineup"}],
             [{"text": f"🤖 Auto-Alinear Automático: {a_txt}", "callback_data": "toggle_auto_lineup"}],
@@ -612,3 +614,40 @@ def format_tutorial() -> str:
         "7️⃣ <b>Pega el enlace en el chat</b> de Telegram.\n\n"
         "<i>✅ ¡Una vez conectado, la sesión dura 90 días y se renueva automáticamente!</i>"
     )
+
+
+def format_admin_stats(stats: Dict[str, Any]) -> str:
+    total_u = stats.get("total_telegram_users", 0)
+    logged_u = stats.get("total_logged_in_users", 0)
+    users = stats.get("users", [])
+
+    lines = [
+        "📊 <b>Panel de Estadísticas y Usuarios del Bot</b>\n",
+        f"👥 <b>Usuarios Registrados (Telegram):</b> <code>{total_u}</code>",
+        f"🔐 <b>Cuentas Fantasy Conectadas:</b> <code>{logged_u}</code>",
+        f"⏳ <b>Ratio de Conversión:</b> <code>{(logged_u / max(1, total_u)) * 100:.1f}%</code>\n",
+        "📋 <b>LISTADO DE USUARIOS ACTIVOS:</b>"
+    ]
+
+    if not users:
+        lines.append("<i>(No hay usuarios registrados todavía)</i>")
+        return "\n".join(lines)
+
+    for idx, u in enumerate(users[:20], 1):
+        status_icon = "🟢" if u.get("is_logged_in") else "⚪"
+        uname = f"@{u['username']}" if u.get("username") else "Sin alias"
+        fname = u.get("first_name", "Usuario")
+        cid = u.get("chat_id")
+        last_s = u.get("last_seen", "Desconocido")
+        cnt = u.get("interaction_count", 1)
+
+        lines.append(
+            f"{idx}. {status_icon} <b>{fname}</b> ({uname})\n"
+            f"   🆔 <code>{cid}</code>  |  🔄 {cnt} interacciones\n"
+            f"   📅 Última actividad: <i>{last_s}</i>\n"
+        )
+
+    if len(users) > 20:
+        lines.append(f"<i>...y {len(users) - 20} usuarios más en el registro.</i>")
+
+    return "\n".join(lines)
