@@ -421,7 +421,7 @@ class TelegramBot:
         )
 
         # Notify Admin
-        admin_id = os.environ.get("TELEGRAM_ADMIN_CHAT_ID") or "351138675"
+        admin_id = os.environ.get("TELEGRAM_ADMIN_CHAT_ID")
         if admin_id:
             try:
                 admin_msg = (
@@ -1061,7 +1061,7 @@ class TelegramBot:
         )
 
         # Notify Admin if TELEGRAM_ADMIN_CHAT_ID is configured
-        admin_id = os.environ.get("TELEGRAM_ADMIN_CHAT_ID") or "351138675"
+        admin_id = os.environ.get("TELEGRAM_ADMIN_CHAT_ID")
         if admin_id:
             try:
                 uname = user_info.get("username")

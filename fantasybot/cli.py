@@ -604,7 +604,11 @@ def cmd_watch(args):
 def cmd_telegram(args):
     """Run the multi-user Telegram Bot daemon."""
     from .telegram.bot import run_bot
-    token = args.token or os.environ.get("TELEGRAM_BOT_TOKEN") or ""
+    token = args.token or os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not token:
+        print("Error: No Telegram Bot token configured.")
+        print("Provide it via --token <TOKEN>, TELEGRAM_BOT_TOKEN in .env, or environment variable.")
+        sys.exit(1)
     run_bot(token)
 
     def fire():

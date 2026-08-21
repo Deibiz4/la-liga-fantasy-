@@ -40,3 +40,18 @@ PKCE_PATH = os.path.join(ROOT, ".pkce.json")
 
 # Margin for refreshing the token before it expires (seconds).
 TOKEN_EXPIRY_MARGIN = 120
+
+def _load_env():
+    env_path = os.path.join(ROOT, ".env")
+    if os.path.isfile(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip())
+        except Exception:
+            pass
+
+_load_env()
