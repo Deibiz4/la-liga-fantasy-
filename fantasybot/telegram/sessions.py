@@ -108,14 +108,22 @@ def start_pkce_login(chat_id: int) -> Tuple[str, str]:
 
 
 def complete_pkce_login(chat_id: int, text_or_url: str) -> Dict[str, Any]:
-    """Exchanges an authredirect:// URL or code for tokens and saves user session."""
+    """Exchanges an authredirect:// URL or code for tokens and saves user session strictly isolated."""
     pending = _PENDING_PKCE.get(chat_id)
     if not pending:
         raise auth.AuthError("No hay un inicio de sesión pendiente. Escribe /login para empezar.")
 
     code = auth.extract_code(text_or_url)
     verifier = pending["verifier"]
-    tokens = auth.exchange_code(code, verifier)
+    # Exchange code directly without touching global tokens.json
+    tokens = auth._post_token({
+        "grant_type": "authorization_code",
+        "client_id": config.CLIENT_ID,
+        "code": code,
+        "redirect_uri": config.REDIRECT_URI,
+        "code_verifier": verifier,
+        "scope": config.SCOPE,
+    })
     save_user_tokens(chat_id, tokens)
     _PENDING_PKCE.pop(chat_id, None)
 
@@ -137,13 +145,14 @@ def set_user_active_league(chat_id: int, league_id: str):
 
 
 class UserFantasyClient(FantasyClient):
-    """A FantasyClient subclass that reads tokens and active league specific to a Telegram chat_id."""
+    """A FantasyClient subclass that reads tokens and active league strictly isolated to a Telegram chat_id."""
 
     def __init__(self, chat_id: int):
         self.chat_id = chat_id
-        super().__init__()
+        # Do NOT call super().__init__() because it loads global tokens.json
+        self.tokens = {}
 
-    def _token(self) -> str:
+    def _bearer(self) -> str:
         tokens = load_user_tokens(self.chat_id)
         if not tokens:
             raise auth.AuthError("No has iniciado sesión. Escribe /login para conectar tu cuenta.")
@@ -155,12 +164,30 @@ class UserFantasyClient(FantasyClient):
         exp = auth.jwt_exp(target_token) if target_token else None
 
         if exp is not None and time.time() >= (exp - config.TOKEN_EXPIRY_MARGIN):
-            # Refresh
-            new_tokens = auth.refresh_tokens(tokens)
-            save_user_tokens(self.chat_id, new_tokens)
-            tokens = new_tokens
+            self.refresh()
+            tokens = load_user_tokens(self.chat_id)
 
         return auth.bearer_token(tokens)
+
+    def refresh(self):
+        tokens = load_user_tokens(self.chat_id)
+        if not tokens:
+            raise auth.AuthError("No has iniciado sesión. Escribe /login para conectar tu cuenta.")
+        rt = tokens.get("refresh_token")
+        if not rt:
+            raise auth.AuthError("No hay token de renovación. Escribe /login para volver a conectar.")
+        new_tokens = auth._post_token({
+            "grant_type": "refresh_token",
+            "refresh_token": rt,
+            "client_id": config.CLIENT_ID,
+            "scope": config.SCOPE,
+        })
+        new_tokens.setdefault("refresh_token", rt)
+        if "settings" in tokens:
+            new_tokens["settings"] = tokens["settings"]
+        if "active_league_id" in tokens:
+            new_tokens["active_league_id"] = tokens["active_league_id"]
+        save_user_tokens(self.chat_id, new_tokens)
 
     def default_ids(self):
         leagues = self.leagues()
