@@ -386,6 +386,45 @@ def format_manager_history(m: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def format_scouting_card(s: Dict[str, Any]) -> str:
+    name = s.get("name", "Jugador")
+    pos = s.get("pos", "Jugador")
+    team = s.get("team", "LaLiga")
+    mv = s.get("market_value", 0)
+    cur_pts = s.get("current_points", 0)
+    cur_avg = s.get("current_avg", 0.0)
+    last_pts = s.get("last_season_points", 0)
+    last_avg = s.get("last_season_avg", 0.0)
+    tier = s.get("tier_badge", "")
+    starter = s.get("starter_status", "")
+    role_shift = s.get("role_shift", "")
+    evolution = s.get("evolution", "")
+    phys = s.get("physical_status", "")
+    efficiency = s.get("efficiency", "")
+    verdict = s.get("verdict", "")
+
+    lines = [
+        f"🔍 <b>Informe de Scouting: {name}</b> ({pos})",
+        f"🏟 <b>Equipo:</b> {team}  |  💵 <b>Valor:</b> {fmt_eur(mv)}\n",
+        f"📜 <b>HISTORIAL TEMPORADA PASADA:</b>",
+        f"• <b>Puntos Totales:</b> <b>{last_pts} pts</b> (Media: ~{last_avg} pts/jornada)",
+        f"• <b>Categoría:</b> {tier}\n",
+        f"📊 <b>TEMPORADA ACTUAL:</b>",
+        f"• <b>Puntos Acumulados:</b> <b>{cur_pts} pts</b> (Media: {cur_avg:.1f} pts/partido)",
+        f"• <b>Evolución:</b> {evolution}\n",
+        f"🏃‍♂️ <b>TITULARIDAD Y ROL TÁCTICO:</b>",
+        f"• <b>Previsión Once:</b> {starter}",
+        f"• <b>Análisis de Rol:</b> <i>{role_shift}</i>\n",
+        f"🩺 <b>ESTADO FÍSICO Y DISPONIBILIDAD:</b>",
+        f"• {phys}\n",
+        f"💰 <b>RENTABILIDAD ECONÓMICA (€/pt):</b>",
+        f"• {efficiency}\n",
+        f"🎯 <b>DICTAMEN DE SCOUTING:</b>",
+        f"<b>{verdict}</b>"
+    ]
+    return "\n".join(lines)
+
+
 def format_market(market_items: List[Dict[str, Any]]) -> str:
     lines = ["🛒 <b>Mercado de Fichajes en Vivo</b>\n"]
     sorted_items = sorted(market_items, key=lambda x: -(x.get("price") or x.get("playerMaster", {}).get("marketValue") or 0))
@@ -396,11 +435,14 @@ def format_market(market_items: List[Dict[str, Any]]) -> str:
         name = pm.get("nickname") or pm.get("name") or "Jugador"
         price = it.get("price") or pm.get("marketValue") or 0
         clause = it.get("buyoutClause") or pm.get("marketValue") or 0
+        last_pts = int(pm.get("lastSeasonPoints") or 0)
+        pts_badge = f"  |  🏆 Pasada: <b>{last_pts} pts</b>" if last_pts > 0 else ""
         lines.append(
-            f"• <b>{name}</b> ({pos})\n"
+            f"• <b>{name}</b> ({pos}){pts_badge}\n"
             f"  💵 Precio: {fmt_eur(price)}  |  🔒 Cláusula: {fmt_eur(clause, compact=True)}\n"
         )
 
+    lines.append("<i>💡 Escribe /scout <nombre> para ver el informe histórico de cualquier jugador.</i>")
     return "\n".join(lines)
 
 

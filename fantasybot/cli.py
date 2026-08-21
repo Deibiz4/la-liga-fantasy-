@@ -597,8 +597,24 @@ def cmd_watch(args):
     srv, url = monitor.serve(args.host, args.port, background=True,
                              run_mode="hermes" if args.hermes else "agent")
     print(f"Mission Control at {url}")
-    if args.host in ("127.0.0.1", "localhost"):
-        print(f"  (remote VPS: tunnel  ssh -L {args.port}:127.0.0.1:{args.port} <server>)")
+def cmd_scout(args):
+    """Scout a player: multi-season points history, starter status, and evolution."""
+    from .api import FantasyClient
+    from .strategy import scouting as scouting_mod
+    c = FantasyClient()
+    all_p = c.all_players() or []
+    pm = scouting_mod.search_player_in_list(args.player, all_p)
+    if not pm:
+        print(f"No player found matching '{args.player}'.")
+        return
+    s = scouting_mod.analyze_player_profile(pm)
+    print(f"\n--- SCOUTING REPORT: {s['name']} ({s['pos']}) ---")
+    print(f"Team: {s['team']} | Value: {s['market_value']:,} €")
+    print(f"Past Season: {s['last_season_points']} pts (~{s['last_season_avg']} pts/gw) | {s['tier_badge']}")
+    print(f"Current: {s['current_points']} pts ({s['current_avg']:.1f} pts/gw) | {s['evolution']}")
+    print(f"Lineup Role: {s['starter_status']} ({s['role_shift']})")
+    print(f"Fitness & Availability: {s['physical_status']}")
+    print(f"Verdict: {s['verdict']}\n")
 
 
 def cmd_telegram(args):
@@ -763,10 +779,19 @@ def build_parser():
     tg.add_argument("--token", help="Telegram Bot Token (or TELEGRAM_BOT_TOKEN env)")
     tg.set_defaults(func=cmd_telegram)
 
+    sc = sub.add_parser("scout", help="multi-season scouting report for a player (scout <player>)")
+    sc.add_argument("player", help="player name, nickname or ID")
+    sc.set_defaults(func=cmd_scout)
+
     return p
 
 
 def main(argv=None):
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     args = build_parser().parse_args(argv)
     try:
         args.func(args)

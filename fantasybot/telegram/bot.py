@@ -212,6 +212,10 @@ class TelegramBot:
                 f"🆔 <b>Tu Telegram Chat ID es:</b> <code>{chat_id}</code>\n\n"
                 f"👤 <b>Usuario:</b> @{msg.get('from', {}).get('username', 'Sin alias')}"
             )
+        elif text.startswith("/scout") or text.startswith("/player") or text.startswith("/jugador"):
+            parts = text.split(maxsplit=1)
+            query = parts[1] if len(parts) > 1 else None
+            self.cmd_scout(chat_id, query)
         elif text.startswith("/bug"):
             content = text[4:].strip()
             self.cmd_report(chat_id, msg.get("from", {}), "BUG", content)
@@ -222,7 +226,7 @@ class TelegramBot:
             self.send_message(
                 chat_id,
                 "🤖 Comando no reconocido. Escribe /menu o pulsa en el botón interactivo:",
-                reply_markup=ui.main_menu_keyboard(sessions.is_logged_in(chat_id))
+                reply_markup=ui.main_menu_keyboard(sessions.is_user_logged_in(chat_id))
             )
 
     def handle_callback_query(self, cb: Dict[str, Any]):
@@ -305,6 +309,9 @@ class TelegramBot:
         elif data.startswith("history_"):
             manager_id = data.split("_")[1]
             self.cmd_history_detail(chat_id, manager_id, message_id=message_id)
+        elif data.startswith("scout_"):
+            pid = data.split("scout_")[1]
+            self.cmd_scout(chat_id, pid, message_id=message_id)
 
     # --- Actions ---
 
@@ -350,6 +357,7 @@ class TelegramBot:
             "• /rivals [nombre|#1] - Finanzas, saldo estimado y blindajes de rivales\n"
             "• /history [nombre|#1] - Historial de compras/ventas, flips y ROI\n"
             "• /market - Jugadores en venta en el mercado de tu liga\n"
+            "• /scout <jugador> - Informe histórico, titularidad y evolución\n"
             "• /trends - Jugadores que más suben y bajan en LaLiga\n"
             "• /flip - Oportunidades de reventa y pujas\n\n"
             "🚀 <b>Autopilot y Ajustes:</b>\n"
@@ -665,6 +673,42 @@ class TelegramBot:
                 self.send_message(chat_id, text, reply_markup=markup)
         except Exception as e:
             self.send_message(chat_id, f"❌ Error al cargar tendencias: {e}")
+
+    def cmd_scout(self, chat_id: int, query: Optional[str] = None, message_id: Optional[int] = None):
+        client = self._get_client_or_ask_login(chat_id)
+        if not client:
+            return
+        if not query or not query.strip():
+            self.send_message(
+                chat_id,
+                "🔍 <b>Buscar Informe de Scouting:</b>\n\n"
+                "Escribe <code>/scout &lt;nombre o apellido&gt;</code> para consultar el historial de temporadas pasadas, titularidad y evolución de cualquier futbolista de LaLiga.\n\n"
+                "<i>Ejemplo:</i> <code>/scout Yamal</code> o <code>/scout Batalla</code>",
+                reply_markup=ui.back_to_menu_keyboard()
+            )
+            return
+
+        try:
+            from ..strategy import scouting as scouting_mod
+            all_p = client.all_players() or []
+            matched_pm = scouting_mod.search_player_in_list(query.strip(), all_p)
+            if not matched_pm:
+                self.send_message(
+                    chat_id,
+                    f"❓ No se encontró ningún jugador que coincida con '<b>{query}</b>'.\nPrueba a escribir otro nombre o apellido.",
+                    reply_markup=ui.back_to_menu_keyboard()
+                )
+                return
+
+            scout_data = scouting_mod.analyze_player_profile(matched_pm)
+            text = ui.format_scouting_card(scout_data)
+            markup = ui.back_to_menu_keyboard()
+            if message_id:
+                self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
+            else:
+                self.send_message(chat_id, text, reply_markup=markup)
+        except Exception as e:
+            self.send_message(chat_id, f"❌ Error al consultar scouting: {e}", reply_markup=ui.back_to_menu_keyboard())
 
     def cmd_flip(self, chat_id: int, message_id: Optional[int] = None):
         client = self._get_client_or_ask_login(chat_id)
