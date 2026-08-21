@@ -17,11 +17,14 @@ from datetime import datetime, timezone
 
 from . import auth
 from .api import FantasyClient, FantasyError
+from .matching import POS
 from .sources import lineups as ff_lineups
 from .sources.market_trends import market_trends
 from .strategy import flip
 from .strategy import lineup as lineup_opt
 from .strategy import needs as needs_mod
+from .strategy import rivals as rivals_mod
+from .strategy import history as history_mod
 from . import agent as agent_mod
 from . import execute as execute_mod
 from . import events
@@ -74,6 +77,211 @@ def cmd_market(args):
     fc = FantasyClient()
     lid, _ = fc.default_ids()
     _print_json(fc.market(lid))
+
+
+def cmd_rivals(args):
+    fc = FantasyClient()
+    lid, _ = fc.default_ids()
+    if getattr(args, "league", None):
+        lid = args.league
+
+    rivals = rivals_mod.analyze_rivals(fc, lid, initial_budget=args.initial_budget)
+
+    teams = fc.league_teams(lid)
+    curr_snap = state.snapshot_rivals(teams)
+    prev_snap = state.load_rivals_snapshot()
+    clause_diffs = state.diff_rival_clauses(prev_snap, curr_snap)
+    state.save_rivals_snapshot(curr_snap)
+
+    first_r = rivals[0] if rivals else {}
+    events_count = first_r.get("tracked_events_count", 0)
+    d_from = first_r.get("tracked_from_date", "?")
+    d_to = first_r.get("tracked_to_date", "?")
+
+    if args.json:
+        return _print_json({
+            "league_id": lid,
+            "tracked_events": events_count,
+            "tracked_from": d_from,
+            "tracked_to": d_to,
+            "rivals": rivals,
+            "recent_clause_increases": clause_diffs,
+        })
+
+    target_raw = " ".join(args.manager).strip() if getattr(args, "manager", None) else None
+    if target_raw:
+        target_lower = target_raw.lower()
+        matched = []
+
+        # 1. Match by rank/position number (#1, 1, 2...)
+        clean_num = target_lower.lstrip("#")
+        if clean_num.isdigit():
+            pos_num = int(clean_num)
+            matched = [r for r in rivals if r.get("position") == pos_num]
+
+        # 2. Match "me" or "you"
+        if not matched and target_lower in ("me", "you"):
+            matched = [r for r in rivals if r.get("is_me")]
+
+        # 3. Match by manager ID or team ID
+        if not matched:
+            matched = [r for r in rivals if str(r.get("manager_id")) == target_raw or str(r.get("team_id")) == target_raw]
+
+        # 4. Match by manager name substring
+        if not matched:
+            matched = [r for r in rivals if target_lower in r.get("manager_name", "").lower()]
+
+        if not matched:
+            print(f"No manager matching '{target_raw}' found (search by name, rank #1-#8, or ID).")
+            return
+        r = matched[0]
+        profit_sign = "+" if r["net_profit"] >= 0 else ""
+        print(f"Manager: {r['manager_name']} (#{r['position']} - {r['points']} pts)")
+        print(f"Team Value: {r['team_value']:,} | Estimated Cash: ~{r['estimated_balance']:,}")
+        if r["is_me"] and r.get("known_balance") is not None:
+            delta = r["known_balance"] - r["estimated_balance"]
+            tot_real = r["team_value"] + r["known_balance"]
+            dev_pct = (delta / tot_real) * 100 if tot_real else 0
+            print(f"Account Verification -> Real Cash: {r['known_balance']:,} | Cash Delta: {delta:+,} | Global Wealth Deviation: {dev_pct:+.2f}%")
+        print(f"Purchases: {r['purchases']:,} | Sales: {r['sales']:,} | Prizes: {r['prizes']:,} (Net: {profit_sign}{r['net_profit']:,})\n")
+        print(f"{'PLAYER':<18}{'POS':<5}{'BOUGHT AT':>14}{'CURRENT VALUE':>15}{'PROFIT / LOSS':>23}{'CLAUSE':>14}{'PROTECTION':>12}")
+        print("-" * 105)
+        for p in r.get("players", []):
+            if p["is_initial"]:
+                bought_str = "(Initial)"
+                gain_str = "-"
+            else:
+                bought_str = f"{p['bought_price']:,}"
+                diff_sign = "+" if p["diff"] >= 0 else ""
+                gain_str = f"{diff_sign}{p['diff']:,} ({p['diff_pct']:+.1f}%)"
+
+            prot_str = f"+{p['protection']:,}" if p["protection"] > 0 else "-"
+            print(f"{p['name'][:17]:<18}{p['pos']:<5}{bought_str:>14}{p['market_value']:>15,}{gain_str:>23}{p['buyout_clause']:>14,}{prot_str:>12}")
+        return
+
+    print("League Rivals: Squad Value, Trading & Estimated Finances")
+    print(f"[Archive: {events_count} transactions tracked from {d_from} to {d_to}]\n")
+    print(f"{'POS':<4}{'MANAGER':<18}{'TEAM VALUE':>13}{'SQ':>4}{'PURCHASES':>13}{'SALES':>13}"
+          f"{'NET PROFIT':>13}{'EST. CASH':>14}  TOP PROTECTED")
+    print("-" * 108)
+    for r in rivals:
+        is_me = " (you)" if r["is_me"] else ""
+        mgr_label = (r["manager_name"][:15] + is_me)[:18]
+        top = ""
+        if r["top_protected"]:
+            top = f"{r['top_protected']['name']} (+{r['top_protected']['invested']:,})"
+        elif r["max_clause_player"]:
+            top = f"{r['max_clause_player']['name']} (c={r['max_clause_player']['buyout_clause']:,})"
+
+        pos_str = f"#{r['position']}" if r["position"] else "-"
+        profit_str = f"{r['net_profit']:+,}"
+        cash_str = f"{r['estimated_balance']:,}"
+        print(f"{pos_str:<4}{mgr_label:<18}{r['team_value']:>13,}{r['players_count']:>4}"
+              f"{r['purchases']:>13,}{r['sales']:>13,}{profit_str:>13}"
+              f"{cash_str:>14}  {top}")
+
+    my_r = next((r for r in rivals if r["is_me"]), None)
+    if my_r and my_r.get("known_balance") is not None:
+        delta = my_r["known_balance"] - my_r["estimated_balance"]
+        delta_str = f"{delta:+,}"
+        print(f"\n* Reality check on your account: Real cash={my_r['known_balance']:,} vs Pure estimated={my_r['estimated_balance']:,} (delta: {delta_str})")
+
+    if clause_diffs:
+        print("\nRecent Clause Increases:")
+        for d in clause_diffs:
+            print(f"  * {d['manager']}: {d['name']} clause raised +{d['delta']:,} "
+                  f"({d['old_clause']:,} -> {d['new_clause']:,})")
+
+
+def cmd_history(args):
+    fc = FantasyClient()
+    lid, _ = fc.default_ids()
+    if getattr(args, "league", None):
+        lid = args.league
+
+    report = history_mod.analyze_league_trading_history(fc, lid)
+    managers = report["managers"]
+
+    if args.json:
+        return _print_json(report)
+
+    target_raw = " ".join(args.manager).strip() if getattr(args, "manager", None) else None
+    if target_raw:
+        target_lower = target_raw.lower()
+        matched = []
+
+        clean_num = target_lower.lstrip("#")
+        if clean_num.isdigit():
+            pos_num = int(clean_num)
+            matched = [m for m in managers if m.get("position") == pos_num]
+
+        if not matched and target_lower in ("me", "you"):
+            matched = [m for m in managers if m.get("is_me")]
+
+        if not matched:
+            matched = [m for m in managers if str(m.get("manager_id")) == target_raw]
+
+        if not matched:
+            matched = [m for m in managers if target_lower in m.get("manager_name", "").lower()]
+
+        if not matched:
+            print(f"No manager matching '{target_raw}' found in trading history.")
+            return
+
+        m = matched[0]
+        flips = m["completed_flips"]
+        open_holdings = m["open_holdings"]
+        init_sales = m["initial_sales"]
+
+        tot_pnl_sign = "+" if m["total_pnl"] >= 0 else ""
+        real_pnl_sign = "+" if m["realized_profit"] >= 0 else ""
+        unreal_pnl_sign = "+" if m["unrealized_profit"] >= 0 else ""
+
+        print(f"Trading & Portfolio P&L: {m['manager_name']} (#{m['position']} - {m['points']} pts)")
+        print(f"Total Portfolio P&L: {tot_pnl_sign}{m['total_pnl']:,} "
+              f"(Realized: {real_pnl_sign}{m['realized_profit']:,} | Unrealized: {unreal_pnl_sign}{m['unrealized_profit']:,})")
+        print(f"Total Purchases: {m['total_purchases_spent']:,} | Total Sales: {m['total_sales_revenue']:,}\n")
+
+        if open_holdings:
+            print(f"Open Purchased Holdings ({len(open_holdings)} players currently in squad):")
+            print(f"{'PLAYER':<18}{'POS':<5}{'BOUGHT AT':>14}{'CURRENT VALUE':>15}{'DAYS':>6}{'UNREALIZED P/L':>20}{'ROI':>10}")
+            print("-" * 90)
+            for o in open_holdings:
+                p_str = f"{o['unrealized_profit']:+,}"
+                r_str = f"{o['roi_pct']:+.1f}%"
+                print(f"{o['name'][:17]:<18}{o['pos']:<5}{o['buy_price']:>14,}{o['market_value']:>15,}{o['holding_days']:>6}{p_str:>20}{r_str:>10}")
+            print()
+
+        if flips:
+            print(f"Completed Flips ({len(flips)} closed trades | Win Rate: {m['win_rate_pct']:.1f}% | Avg ROI: {m['avg_roi_pct']:+.1f}%):")
+            print(f"{'PLAYER':<18}{'POS':<5}{'BOUGHT AT':>14}{'SOLD AT':>15}{'DAYS':>6}{'REALIZED P/L':>20}{'ROI':>10}")
+            print("-" * 90)
+            for f in flips:
+                p_str = f"{f['profit']:+,}"
+                r_str = f"{f['roi_pct']:+.1f}%"
+                print(f"{f['name'][:17]:<18}{f['pos']:<5}{f['buy_price']:>14,}{f['sell_price']:>15,}{f['holding_days']:>6}{p_str:>20}{r_str:>10}")
+            print()
+
+        if init_sales:
+            print(f"Initial Squad Liquidations ({len(init_sales)} players sold):")
+            for s in init_sales:
+                print(f"  * {s['name']} ({s['pos']}) sold for {s['sell_price']:,} on {s['sell_date']}")
+        return
+
+    print("League Trading Performance & Speculation ROI Leaderboard")
+    print(f"[Archive: {report['tracked_events']} transactions from {report['tracked_from']} to {report['tracked_to']}]\n")
+    print(f"{'RANK':<5}{'MANAGER':<18}{'TOTAL P&L':>16}{'REALIZED':>15}{'UNREALIZED':>15}{'FLIPS':>6}{'WIN%':>7}{'AVG ROI':>9}")
+    print("-" * 95)
+    for idx, m in enumerate(managers, 1):
+        is_me = " (you)" if m["is_me"] else ""
+        mgr_label = (m["manager_name"][:15] + is_me)[:18]
+        tot_str = f"{m['total_pnl']:+,}"
+        real_str = f"{m['realized_profit']:+,}"
+        unreal_str = f"{m['unrealized_profit']:+,}"
+        win_str = f"{m['win_rate_pct']:.1f}%" if m["total_trades"] else "-"
+        avg_str = f"{m['avg_roi_pct']:+.1f}%" if m["total_trades"] else "-"
+
+        print(f"#{idx:<4}{mgr_label:<18}{tot_str:>16}{real_str:>15}{unreal_str:>15}{m['total_trades']:>6}{win_str:>7}{avg_str:>9}")
 
 
 def cmd_trends(args):
@@ -253,6 +461,13 @@ def cmd_agent(args):
         for t in rep["clause_targets"]:
             print(f"  {t['nombre']:<18} {t['pos']}  clause {t['clause']:,}  "
                   f"opens {t['unlock']}")
+
+    if rep.get("rivals"):
+        top_buyers = sorted([r for r in rep["rivals"] if not r["is_me"]], key=lambda r: -r["estimated_balance"])[:3]
+        if top_buyers:
+            print("\nTop rival buying power (estimated available cash):")
+            for r in top_buyers:
+                print(f"  #{r['position']} {r['manager_name']:<18} balance ~{r['estimated_balance']:>11,} (team: {r['team_value']:,})")
 
     if rep["reminders"]:
         print("\nScheduled reminders:")
@@ -444,6 +659,20 @@ def build_parser():
     fp.add_argument("--horizon", type=int, default=flip.DEFAULT_HORIZON)
     fp.add_argument("--json", action="store_true", help="JSON output")
     fp.set_defaults(func=cmd_flip)
+
+    rv = sub.add_parser("rivals", help="rival budgets, cash flow & clause investments")
+    rv.add_argument("manager", nargs="*", help="manager name, rank (#1, 1), or ID to inspect squad & clauses")
+    rv.add_argument("--initial-budget", type=int, default=None,
+                    help="initial budget override (default: 100M)")
+    rv.add_argument("--league", help="override league ID")
+    rv.add_argument("--json", action="store_true", help="JSON output")
+    rv.set_defaults(func=cmd_rivals)
+
+    hs = sub.add_parser("history", help="manager trading history, completed flips & ROI")
+    hs.add_argument("manager", nargs="*", help="manager name, rank (#1, 1), or ID to inspect trading history")
+    hs.add_argument("--league", help="override league ID")
+    hs.add_argument("--json", action="store_true", help="JSON output")
+    hs.set_defaults(func=cmd_history)
 
     opt = sub.add_parser("optimize", help="best lineup (--apply to save)")
     opt.add_argument("--apply", action="store_true", help="save the lineup")

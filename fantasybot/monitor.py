@@ -188,6 +188,12 @@ class _Server(http.server.ThreadingHTTPServer):
     allow_reuse_address = True
     run_mode = "agent"
 
+    def handle_error(self, request, client_address):
+        exc_type = sys.exc_info()[0]
+        if exc_type in (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            return
+        super().handle_error(request, client_address)
+
 
 def serve(host=DEFAULT_HOST, port=DEFAULT_PORT, background=False, run_mode="agent"):
     """Starts the server. Returns (server, url). With background=True, non-blocking.

@@ -33,6 +33,8 @@ python -m fantasybot lineup       # your lineup
 python -m fantasybot trends       # who's rising/falling in value (futbolfantasy)
 python -m fantasybot onces real-madrid   # a team's likely starting XI
 python -m fantasybot flip [--horizon N]  # resale opportunities
+python -m fantasybot rivals [manager|rank] [--json] # rival balances, squad P/L & clause investments
+python -m fantasybot history [manager|rank] [--json] # manager trading history, completed flips & ROI
 python -m fantasybot optimize [--apply]  # best lineup (apply with --apply)
 python -m fantasybot needs [--days N]    # squad gaps and signings
 python -m fantasybot sell <playerId> <price>     # list a player for sale
@@ -66,7 +68,11 @@ agent schedules its flips into a "plan" (`bid-plan`) and a cron bids right at th
 close: if there's no competition, the value plus a touch; if there is, up to your
 max. Deterministic and free of tokens.
 
-The decision commands (`agent`, `flip`, `needs`, `optimize`) accept `--json` for
+**Rival tracking & Trade History:**
+- `rivals [manager|rank]`: estimates rivals' liquid balances, trading flow, clause investments, and acquisition performance.
+- `history [manager|rank]`: analyzes speculation profitability, completed flips with ROI % and holding duration, open portfolio holdings, and initial squad liquidations.
+
+The decision commands (`agent`, `flip`, `needs`, `optimize`, `rivals`, `history`) accept `--json` for
 programmatic consumption (that's how the autonomous agent reads them).
 
 ## Autonomous agent (Hermes)
