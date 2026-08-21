@@ -62,6 +62,10 @@ def get_user_settings(chat_id: int) -> Dict[str, bool]:
     settings = tokens.get("settings", {})
     return {
         "notify_flips": settings.get("notify_flips", True),
+        "notify_market_reset": settings.get("notify_market_reset", True),
+        "notify_injuries": settings.get("notify_injuries", True),
+        "notify_expulsions": settings.get("notify_expulsions", True),
+        "notify_player_points": settings.get("notify_player_points", True),
         "notify_lineup": settings.get("notify_lineup", True),
         "auto_lineup": settings.get("auto_lineup", False),
     }
@@ -70,7 +74,15 @@ def get_user_settings(chat_id: int) -> Dict[str, bool]:
 def toggle_user_setting(chat_id: int, key: str) -> Dict[str, bool]:
     tokens = load_user_tokens(chat_id) or {}
     settings = tokens.get("settings", {})
-    default_on = (key in ("notify_flips", "notify_lineup"))
+    default_on = (key in (
+        "notify_flips",
+        "notify_market_reset",
+        "notify_injuries",
+        "notify_expulsions",
+        "notify_player_points",
+        "notify_matchday_points",
+        "notify_lineup",
+    ))
     cur_val = settings.get(key, default_on)
     settings[key] = not cur_val
     tokens["settings"] = settings

@@ -113,14 +113,22 @@ def sell_player_keyboard(players: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def settings_keyboard(settings: Dict[str, bool]) -> Dict[str, Any]:
-    f_txt = "ACTIVADAS 🔔" if settings.get("notify_flips") else "DESACTIVADAS 🔕"
-    l_txt = "ACTIVADO ⏰" if settings.get("notify_lineup") else "DESACTIVADO 🔕"
-    a_txt = "ACTIVADO 🤖" if settings.get("auto_lineup") else "DESACTIVADO ⏸"
+    m_txt = "ACTIVADO 🛒" if settings.get("notify_market_reset", True) else "DESACTIVADO 🔕"
+    inj_txt = "ACTIVADO 🚑" if settings.get("notify_injuries", True) else "DESACTIVADO 🔕"
+    exp_txt = "ACTIVADO 🟥" if settings.get("notify_expulsions", True) else "DESACTIVADO 🔕"
+    pts_txt = "ACTIVADO ⚽" if (settings.get("notify_player_points", True) or settings.get("notify_matchday_points", True)) else "DESACTIVADO 🔕"
+    f_txt = "ACTIVADAS 🔔" if settings.get("notify_flips", True) else "DESACTIVADAS 🔕"
+    l_txt = "ACTIVADO ⏰" if settings.get("notify_lineup", True) else "DESACTIVADO 🔕"
+    a_txt = "ACTIVADO 🤖" if settings.get("auto_lineup", False) else "DESACTIVADO ⏸"
     return {
         "inline_keyboard": [
-            [{"text": f"Alertas Flips Mercado: {f_txt}", "callback_data": "toggle_notify_flips"}],
-            [{"text": f"Recordatorio Jornada: {l_txt}", "callback_data": "toggle_notify_lineup"}],
-            [{"text": f"Auto-Alinear Automático: {a_txt}", "callback_data": "toggle_auto_lineup"}],
+            [{"text": f"🛒 Mercado Diario Renovado: {m_txt}", "callback_data": "toggle_notify_market_reset"}],
+            [{"text": f"🚑 Alerta de Lesiones: {inj_txt}", "callback_data": "toggle_notify_injuries"}],
+            [{"text": f"🟥 Alerta de Sanciones / Expulsión: {exp_txt}", "callback_data": "toggle_notify_expulsions"}],
+            [{"text": f"⚽ Puntos de Jugadores (Partido): {pts_txt}", "callback_data": "toggle_notify_player_points"}],
+            [{"text": f"🔔 Chollos de Reventa (Flips): {f_txt}", "callback_data": "toggle_notify_flips"}],
+            [{"text": f"⏰ Recordatorio de Alineación: {l_txt}", "callback_data": "toggle_notify_lineup"}],
+            [{"text": f"🤖 Auto-Alinear Automático: {a_txt}", "callback_data": "toggle_auto_lineup"}],
             [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]
         ]
     }
