@@ -59,7 +59,10 @@ def evaluate(element, index, horizon):
         return None  # name match probably wrong
 
     if element["discr"] == "marketPlayerLeague":
-        via, buy_price = "SISTEMA", element.get("salePrice") or trend["valor"]
+        sale_p = element.get("salePrice") or 0
+        mv = pm.get("marketValue") or 0
+        trend_val = trend.get("valor") or 0
+        via, buy_price = "SISTEMA", max(sale_p, mv, trend_val)
         owner = "Mercado Libre"
     else:
         via = "CLAUSULA"
