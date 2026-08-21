@@ -66,12 +66,12 @@ def evaluate(element, index, horizon):
         owner = "Mercado Libre"
     else:
         via = "CLAUSULA"
-        buy_price = element.get("playerTeam", {}).get("buyoutClause")
+        buy_price = (element.get("playerTeam") or {}).get("buyoutClause")
         if not buy_price:
             return None
         owner = (
-            element.get("sellerTeam", {}).get("manager", {}).get("managerName")
-            or element.get("playerTeam", {}).get("manager", {}).get("managerName")
+            ((element.get("sellerTeam") or {}).get("manager") or {}).get("managerName")
+            or ((element.get("playerTeam") or {}).get("manager") or {}).get("managerName")
             or "Rival"
         )
 

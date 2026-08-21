@@ -597,6 +597,34 @@ def cmd_watch(args):
     srv, url = monitor.serve(args.host, args.port, background=True,
                              run_mode="hermes" if args.hermes else "agent")
     print(f"Mission Control at {url}")
+    if args.host in ("127.0.0.1", "localhost"):
+        print(f"  (remote VPS: tunnel  ssh -L {args.port}:127.0.0.1:{args.port} <server>)")
+
+    def fire():
+        time.sleep(1.2)  # let the UI connect the stream before starting
+        if args.hermes:
+            subprocess.run(["hermes", "-z", monitor.HERMES_PROMPT,
+                            "--skill", "fantasy-manager"])
+        elif args.run:
+            subprocess.run([sys.executable, "-m", "fantasybot", "agent", "--execute"])
+
+    if args.run or args.hermes:
+        threading.Thread(target=fire, daemon=True).start()
+    if not args.no_open:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+
+    print("Ctrl+C to exit.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        srv.shutdown()
+        print("\nSee you later.")
+
+
 def cmd_scout(args):
     """Scout a player or your entire squad."""
     from .api import FantasyClient
@@ -663,30 +691,6 @@ def cmd_telegram(args):
         print("Provide it via --token <TOKEN>, TELEGRAM_BOT_TOKEN in .env, or environment variable.")
         sys.exit(1)
     run_bot(token)
-
-    def fire():
-        time.sleep(1.2)  # let the UI connect the stream before starting
-        if args.hermes:
-            subprocess.run(["hermes", "-z", monitor.HERMES_PROMPT,
-                            "--skill", "fantasy-manager"])
-        elif args.run:
-            subprocess.run([sys.executable, "-m", "fantasybot", "agent", "--execute"])
-
-    if args.run or args.hermes:
-        threading.Thread(target=fire, daemon=True).start()
-    if not args.no_open:
-        try:
-            webbrowser.open(url)
-        except Exception:
-            pass
-
-    print("Ctrl+C to exit.")
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        srv.shutdown()
-        print("\nSee you later.")
 
 
 def cmd_tasks(args):
