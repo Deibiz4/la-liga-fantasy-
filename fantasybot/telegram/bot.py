@@ -212,6 +212,8 @@ class TelegramBot:
                 f"🆔 <b>Tu Telegram Chat ID es:</b> <code>{chat_id}</code>\n\n"
                 f"👤 <b>Usuario:</b> @{msg.get('from', {}).get('username', 'Sin alias')}"
             )
+        elif text.startswith("/scout_team") or text.startswith("/scoutteam") or text.startswith("/scout_plantilla"):
+            self.cmd_scout_team(chat_id)
         elif text.startswith("/scout") or text.startswith("/player") or text.startswith("/jugador"):
             parts = text.split(maxsplit=1)
             query = parts[1] if len(parts) > 1 else None
@@ -312,6 +314,8 @@ class TelegramBot:
         elif data.startswith("scout_"):
             pid = data.split("scout_")[1]
             self.cmd_scout(chat_id, pid, message_id=message_id)
+        elif data == "cmd_scout_team":
+            self.cmd_scout_team(chat_id, message_id=message_id)
 
     # --- Actions ---
 
@@ -351,6 +355,7 @@ class TelegramBot:
             "• /id - Ver tu Telegram Chat ID\n\n"
             "📋 <b>Tu Club:</b>\n"
             "• /team - Tu plantilla, valoraciones y cláusulas\n"
+            "• /scout_team - Auditoría y scouting histórico de tu plantilla\n"
             "• /lineup - Tu XI actual y alineación óptima recomendada\n"
             "• /sell - Seleccionar y poner jugadores en venta al mercado\n\n"
             "⚔️ <b>Rivales y Mercado:</b>\n"
@@ -709,6 +714,24 @@ class TelegramBot:
                 self.send_message(chat_id, text, reply_markup=markup)
         except Exception as e:
             self.send_message(chat_id, f"❌ Error al consultar scouting: {e}", reply_markup=ui.back_to_menu_keyboard())
+
+    def cmd_scout_team(self, chat_id: int, message_id: Optional[int] = None):
+        client = self._get_client_or_ask_login(chat_id)
+        if not client:
+            return
+        try:
+            lid, tid = client.default_ids()
+            team_data = client.team(lid, tid)
+            from ..strategy import scouting as scouting_mod
+            ts = scouting_mod.analyze_team_squad(team_data)
+            text = ui.format_team_scouting_report(ts)
+            markup = ui.scout_team_keyboard(team_data.get("players", []))
+            if message_id:
+                self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
+            else:
+                self.send_message(chat_id, text, reply_markup=markup)
+        except Exception as e:
+            self.send_message(chat_id, f"❌ Error al analizar scouting de plantilla: {e}", reply_markup=ui.back_to_menu_keyboard())
 
     def cmd_flip(self, chat_id: int, message_id: Optional[int] = None):
         client = self._get_client_or_ask_login(chat_id)

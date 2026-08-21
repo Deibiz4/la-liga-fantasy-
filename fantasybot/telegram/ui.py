@@ -93,10 +93,27 @@ def flips_keyboard(flips: List[Dict[str, Any]]) -> Dict[str, Any]:
 def team_keyboard() -> Dict[str, Any]:
     return {
         "inline_keyboard": [
+            [{"text": "🔍 Scouting de mi Plantilla", "callback_data": "cmd_scout_team"}],
             [{"text": "🏷 Poner Jugador en Venta", "callback_data": "cmd_sell_menu"}],
             [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]
         ]
     }
+
+
+def scout_team_keyboard(players: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = []
+    for p in players:
+        pm = p.get("playerMaster", {})
+        pid = pm.get("id")
+        name = pm.get("nickname") or pm.get("name") or "Jugador"
+        pos = POS.get(pm.get("positionId"), "?")
+        last_pts = int(pm.get("lastSeasonPoints") or 0)
+        p_badge = f"{last_pts} pts" if last_pts > 0 else "Nuevo"
+        if pid:
+            rows.append([{"text": f"🔍 {name} ({pos} | 🏆 {p_badge})", "callback_data": f"scout_{pid}"}])
+    rows.append([{"text": "🔙 Volver a Mi Plantilla", "callback_data": "cmd_team"}])
+    rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
+    return {"inline_keyboard": rows}
 
 
 def sell_player_keyboard(players: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -422,6 +439,67 @@ def format_scouting_card(s: Dict[str, Any]) -> str:
         f"🎯 <b>DICTAMEN DE SCOUTING:</b>",
         f"<b>{verdict}</b>"
     ]
+    return "\n".join(lines)
+
+
+def format_team_scouting_report(ts: Dict[str, Any]) -> str:
+    name = ts.get("team_name", "Mi Plantilla")
+    n_players = ts.get("total_players", 0)
+    t_val = ts.get("total_val", 0)
+    t_money = ts.get("team_money", 0)
+    tot_last_pts = ts.get("total_last_pts", 0)
+    avg_last_pts = ts.get("avg_last_pts", 0.0)
+
+    stars = ts.get("stars", [])
+    invalids = ts.get("injured_or_suspended", [])
+    risk = ts.get("role_risk", [])
+    emerging = ts.get("emerging", [])
+
+    lines = [
+        f"🔍 <b>Auditoría de Scouting: {name}</b>",
+        f"💰 <b>Valor:</b> {fmt_eur(t_val)}  |  🏦 <b>Saldo:</b> {fmt_eur(t_money)}",
+        f"👥 <b>Plantilla:</b> {n_players} jugadores  |  🏆 <b>Pts Totales Año Pasado:</b> {tot_last_pts} pts (Media: {avg_last_pts} pts/jugador)\n"
+    ]
+
+    if stars:
+        s_names = ", ".join([f"<b>{r['name']}</b> ({r['last_season_points']} pts)" for r in stars[:5]])
+        lines.append(f"🌟 <b>ESTRELLAS CONSOLIDADAS:</b>\n{s_names}\n")
+
+    if invalids:
+        inv_lines = []
+        for r in invalids:
+            inv_lines.append(f"• <b>{r['name']}</b> ({r['pos']}): {r['physical_status']}")
+        lines.append(f"🚑 <b>BAJAS Y SANCIONES ACTIVAS ({len(invalids)}):</b>\n" + "\n".join(inv_lines) + "\n")
+
+    if risk:
+        r_lines = []
+        for r in risk:
+            prob_str = f"{r['starting_prob']}%" if r['starting_prob'] is not None else "?"
+            r_lines.append(f"• <b>{r['name']}</b> ({r['pos']}): {r['last_season_points']} pts el año pasado → Hoy suplente ({prob_str})")
+        lines.append(f"⚠️ <b>JUGADORES EN RIESGO / PÉRDIDA DE ROL ({len(risk)}):</b>\n" + "\n".join(r_lines) + "\n")
+
+    if emerging:
+        em_lines = []
+        for r in emerging:
+            prob_str = f"{r['starting_prob']}%" if r['starting_prob'] is not None else "?"
+            em_lines.append(f"• <b>{r['name']}</b> ({r['pos']}): {prob_str} titular (sin minutos año pasado)")
+        lines.append(f"🚀 <b>JUGADORES EMERGENTES / REVELACIÓN ({len(emerging)}):</b>\n" + "\n".join(em_lines) + "\n")
+
+    lines.append("📋 <b>RESUMEN POR LÍNEAS:</b>")
+    headers = {1: "🧤 PORTEROS", 2: "🛡 DEFENSAS", 3: "🎯 CENTROCAMPISTAS", 4: "⚡ DELANTEROS"}
+    by_pos = ts.get("by_pos", {})
+    for pid in (1, 2, 3, 4):
+        plist = by_pos.get(pid, [])
+        if plist:
+            lines.append(f"\n<b>{headers[pid]}:</b>")
+            for r in plist:
+                last_p = r['last_season_points']
+                p_badge = f"{last_p} pts" if last_p > 0 else "Nuevo"
+                prob_s = f"{r['starting_prob']}%" if r['starting_prob'] is not None else "?"
+                emoji_v = "🟢" if "MUY" in r['verdict'] else ("🟡" if "ROTACIÓN" in r['verdict'] else "🔴")
+                lines.append(f"{emoji_v} <b>{r['name']}</b>: 🏆 {p_badge} | ⚡ {prob_s} | {fmt_eur(r['market_value'], compact=True)}")
+
+    lines.append("\n<i>💡 Pulsa en cualquier botón abajo para ver la ficha detallada de un jugador.</i>")
     return "\n".join(lines)
 
 

@@ -215,3 +215,52 @@ def search_player_in_list(query: str, players_list: List[Dict[str, Any]]) -> Opt
             return pm
 
     return None
+
+
+def analyze_team_squad(team_data: Dict[str, Any], prob_index: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Runs a full scouting audit across all players in the user's squad."""
+    if prob_index is None:
+        try:
+            prob_index = probable_lineups() or {}
+        except Exception:
+            prob_index = {}
+
+    players = team_data.get("players", [])
+    reports = []
+    for p in players:
+        pm = p.get("playerMaster") or {}
+        rep = analyze_player_profile(pm, prob_index=prob_index)
+        rep["buyoutClause"] = p.get("buyoutClause") or pm.get("marketValue") or 0
+        reports.append(rep)
+
+    total_val = sum(r["market_value"] for r in reports)
+    total_last_pts = sum(r["last_season_points"] for r in reports)
+    avg_last_pts = round(total_last_pts / max(1, len(reports)), 1)
+
+    stars = [r for r in reports if r["last_season_points"] >= 150]
+    injured_or_suspended = [r for r in reports if not r["is_available"]]
+    role_risk = [r for r in reports if r["role_shift_level"] == "WARNING"]
+    emerging = [r for r in reports if r["role_shift_level"] == "BOOST"]
+
+    by_pos = {1: [], 2: [], 3: [], 4: []}
+    for r in reports:
+        by_pos.setdefault(r["pos_id"], []).append(r)
+
+    for pid in (1, 2, 3, 4):
+        if pid in by_pos:
+            by_pos[pid].sort(key=lambda x: -x["market_value"])
+
+    return {
+        "team_name": team_data.get("name", "Mi Plantilla"),
+        "total_players": len(reports),
+        "total_val": total_val,
+        "team_money": team_data.get("teamMoney", 0),
+        "total_last_pts": total_last_pts,
+        "avg_last_pts": avg_last_pts,
+        "stars": stars,
+        "injured_or_suspended": injured_or_suspended,
+        "role_risk": role_risk,
+        "emerging": emerging,
+        "reports": reports,
+        "by_pos": by_pos,
+    }

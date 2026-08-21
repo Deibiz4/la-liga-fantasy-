@@ -598,10 +598,32 @@ def cmd_watch(args):
                              run_mode="hermes" if args.hermes else "agent")
     print(f"Mission Control at {url}")
 def cmd_scout(args):
-    """Scout a player: multi-season points history, starter status, and evolution."""
+    """Scout a player or your entire squad."""
     from .api import FantasyClient
     from .strategy import scouting as scouting_mod
     c = FantasyClient()
+
+    if getattr(args, "team", False) or not args.player:
+        lid, tid = c.default_ids()
+        team_data = c.team(lid, tid)
+        ts = scouting_mod.analyze_team_squad(team_data)
+        print(f"\n--- SQUAD SCOUTING AUDIT: {ts['team_name']} ---")
+        print(f"Squad: {ts['total_players']} players | Value: {ts['total_val']:,} € | Money: {ts['team_money']:,} €")
+        print(f"Past Season Total: {ts['total_last_pts']} pts (Avg: {ts['avg_last_pts']} pts/player)\n")
+
+        headers = {1: "GOALKEEPERS", 2: "DEFENDERS", 3: "MIDFIELDERS", 4: "FORWARDS"}
+        for pid in (1, 2, 3, 4):
+            plist = ts["by_pos"].get(pid, [])
+            if plist:
+                print(f"[{headers[pid]}]")
+                for r in plist:
+                    last_p = r['last_season_points']
+                    p_badge = f"{last_p} pts" if last_p > 0 else "New"
+                    prob_s = f"{r['starting_prob']}%" if r['starting_prob'] is not None else "?"
+                    print(f"  • {r['name']}: {p_badge} last yr | XI prob: {prob_s} | {r['physical_status']} | {r['verdict']}")
+                print()
+        return
+
     all_p = c.all_players() or []
     pm = scouting_mod.search_player_in_list(args.player, all_p)
     if not pm:
@@ -779,8 +801,9 @@ def build_parser():
     tg.add_argument("--token", help="Telegram Bot Token (or TELEGRAM_BOT_TOKEN env)")
     tg.set_defaults(func=cmd_telegram)
 
-    sc = sub.add_parser("scout", help="multi-season scouting report for a player (scout <player>)")
-    sc.add_argument("player", help="player name, nickname or ID")
+    sc = sub.add_parser("scout", help="multi-season scouting report for a player or squad")
+    sc.add_argument("player", nargs="?", default=None, help="player name, nickname or ID")
+    sc.add_argument("--team", action="store_true", help="scout your entire squad")
     sc.set_defaults(func=cmd_scout)
 
     return p

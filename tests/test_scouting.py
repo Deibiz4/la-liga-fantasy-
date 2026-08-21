@@ -116,6 +116,31 @@ class TestScoutingModule(unittest.TestCase):
         self.assertIn("185 pts", formatted)
         self.assertIn("DICTAMEN DE SCOUTING", formatted)
 
+    def test_team_scouting_analysis(self):
+        team_data = {
+            "name": "Super FC",
+            "teamValue": 100_000_000,
+            "teamMoney": 5_000_000,
+            "players": [
+                {"playerMaster": {"id": "1", "nickname": "Courtois", "positionId": 1, "marketValue": 30_000_000, "lastSeasonPoints": 160, "playerStatus": "ok"}},
+                {"playerMaster": {"id": "2", "nickname": "Rudiger", "positionId": 2, "marketValue": 25_000_000, "lastSeasonPoints": 180, "playerStatus": "ok"}},
+                {"playerMaster": {"id": "3", "nickname": "Bellingham", "positionId": 3, "marketValue": 45_000_000, "lastSeasonPoints": 240, "playerStatus": "injured"}},
+            ]
+        }
+        ts = scouting.analyze_team_squad(team_data)
+        self.assertEqual(ts["total_players"], 3)
+        self.assertEqual(ts["total_last_pts"], 580)
+        self.assertEqual(len(ts["stars"]), 3)
+        self.assertEqual(len(ts["injured_or_suspended"]), 1)
+
+        formatted = ui.format_team_scouting_report(ts)
+        self.assertIn("Auditoría de Scouting: Super FC", formatted)
+        self.assertIn("580 pts", formatted)
+        self.assertIn("BAJAS Y SANCIONES ACTIVAS", formatted)
+
+        kb = ui.scout_team_keyboard(team_data["players"])
+        self.assertTrue(any("Courtois" in btn["text"] for row in kb["inline_keyboard"] for btn in row))
+
 
 if __name__ == "__main__":
     unittest.main()
