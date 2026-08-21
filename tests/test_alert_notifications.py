@@ -12,7 +12,9 @@ class TestAlertNotifications(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.orig_sessions_dir = sessions.TELEGRAM_SESSIONS_DIR
+        self.orig_registry_path = sessions.REGISTRY_PATH
         sessions.TELEGRAM_SESSIONS_DIR = self.test_dir
+        sessions.REGISTRY_PATH = os.path.join(self.test_dir, "test_registry.json")
 
         # Reset in-memory trackers
         notifications._LAST_SEEN_PLAYER_STATUS.clear()
@@ -25,6 +27,7 @@ class TestAlertNotifications(unittest.TestCase):
 
     def tearDown(self):
         sessions.TELEGRAM_SESSIONS_DIR = self.orig_sessions_dir
+        sessions.REGISTRY_PATH = self.orig_registry_path
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_settings_and_toggles(self):
