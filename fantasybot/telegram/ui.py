@@ -42,9 +42,23 @@ def main_menu_keyboard(logged_in: bool = True) -> Dict[str, Any]:
                 {"text": "🐛 Reportar Bug", "callback_data": "cmd_bug_btn"},
             ],
             [
-                {"text": "📖 Tutorial Paso a Paso", "callback_data": "cmd_tutorial"},
+                {"text": "💖 Apoyar / Donar ⭐", "callback_data": "cmd_donate"},
                 {"text": "ℹ️ Ayuda & Comandos", "callback_data": "cmd_help"},
+            ],
+            [
+                {"text": "📖 Tutorial Paso a Paso", "callback_data": "cmd_tutorial"},
             ]
+        ]
+    }
+
+
+def donate_keyboard() -> Dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [{"text": "☕ Invitar a un Café (50 ⭐)", "callback_data": "donate_50"}],
+            [{"text": "🍕 Invitar a una Pizza (150 ⭐)", "callback_data": "donate_150"}],
+            [{"text": "🚀 Super Sponsor (500 ⭐)", "callback_data": "donate_500"}],
+            [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]
         ]
     }
 

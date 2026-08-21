@@ -142,11 +142,21 @@ class TelegramBot:
             self.handle_message(update["message"])
         elif "callback_query" in update:
             self.handle_callback_query(update["callback_query"])
+        elif "pre_checkout_query" in update:
+            self.handle_pre_checkout_query(update["pre_checkout_query"])
 
     def handle_message(self, msg: Dict[str, Any]):
         chat_id = msg.get("chat", {}).get("id")
+        if not chat_id:
+            return
+
+        # Check for successful payment
+        if "successful_payment" in msg:
+            self.handle_successful_payment(msg)
+            return
+
         text = msg.get("text", "").strip()
-        if not chat_id or not text:
+        if not text:
             return
 
         # Check for OAuth callback URL or code
@@ -160,6 +170,8 @@ class TelegramBot:
             self.cmd_help(chat_id)
         elif text.startswith("/tutorial"):
             self.cmd_tutorial(chat_id)
+        elif text.startswith("/donate") or text.startswith("/donar"):
+            self.cmd_donate(chat_id)
         elif text.startswith("/login"):
             self.cmd_login(chat_id)
         elif text.startswith("/logout"):
@@ -195,32 +207,35 @@ class TelegramBot:
         elif text.startswith("/me"):
             self.cmd_me(chat_id)
         elif text.startswith("/id") or text.startswith("/myid"):
-            self.send_message(chat_id, f"🆔 Tu Telegram ID es: <code>{chat_id}</code>")
+            self.send_message(
+                chat_id,
+                f"🆔 <b>Tu Telegram Chat ID es:</b> <code>{chat_id}</code>\n\n"
+                f"👤 <b>Usuario:</b> @{msg.get('from', {}).get('username', 'Sin alias')}"
+            )
         elif text.startswith("/bug"):
-            parts = text.split(maxsplit=1)
-            content = parts[1] if len(parts) > 1 else ""
+            content = text[4:].strip()
             self.cmd_report(chat_id, msg.get("from", {}), "BUG", content)
-        elif text.startswith("/sugerencia") or text.startswith("/sugerencias") or text.startswith("/feedback"):
-            parts = text.split(maxsplit=1)
-            content = parts[1] if len(parts) > 1 else ""
+        elif text.startswith("/sugerencia"):
+            content = text[11:].strip()
             self.cmd_report(chat_id, msg.get("from", {}), "SUGERENCIA", content)
         else:
             self.send_message(
                 chat_id,
-                "❓ Comando no reconocido. Usa /menu para abrir el panel de control o /help para ver la lista de comandos.",
-                reply_markup=ui.main_menu_keyboard(sessions.is_user_logged_in(chat_id))
+                "🤖 Comando no reconocido. Escribe /menu o pulsa en el botón interactivo:",
+                reply_markup=ui.main_menu_keyboard(sessions.is_logged_in(chat_id))
             )
 
-    def handle_callback_query(self, cq: Dict[str, Any]):
-        cq_id = cq.get("id")
-        chat_id = cq.get("message", {}).get("chat", {}).get("id")
-        message_id = cq.get("message", {}).get("message_id")
-        data = cq.get("data", "")
+    def handle_callback_query(self, cb: Dict[str, Any]):
+        chat_id = cb.get("message", {}).get("chat", {}).get("id")
+        message_id = cb.get("message", {}).get("message_id")
+        data = cb.get("data", "")
+        cb_id = cb.get("id")
+
+        if cb_id:
+            self.answer_callback_query(cb_id)
 
         if not chat_id:
             return
-
-        self.answer_callback_query(cq_id)
 
         if data == "cmd_menu":
             self.cmd_start(chat_id, message_id=message_id)
@@ -335,11 +350,86 @@ class TelegramBot:
             "🚀 <b>Autopilot y Ajustes:</b>\n"
             "• /autopilot - Ejecutar alineación óptima y auto-pujas\n"
             "• /settings - Configurar alertas y notificaciones inteligentes\n\n"
+            "💖 <b>Apoyo y Donaciones:</b>\n"
+            "• /donate - Invitar a un café y apoyar el desarrollo con Telegram Stars ⭐\n\n"
             "💬 <b>Feedback y Soporte:</b>\n"
             "• /bug &lt;mensaje&gt; - Reportar un error al desarrollador\n"
             "• /sugerencia &lt;mensaje&gt; - Enviar una idea o sugerencia"
         )
         self.send_message(chat_id, text, reply_markup=ui.back_to_menu_keyboard())
+
+    def cmd_donate(self, chat_id: int, message_id: Optional[int] = None):
+        text = (
+            "💖 <b>¡Apoya el Desarrollo de LaLiga Fantasy Bot!</b>\n\n"
+            "Este proyecto es de código abierto, gratuito y mantenido de forma independiente. "
+            "Si el bot te resulta útil para ganar tus ligas, descubrir chollos y gestionar tu equipo, "
+            "puedes contribuir al mantenimiento de los servidores con <b>Telegram Stars ⭐</b>:\n\n"
+            "• ☕ <b>Invitar a un Café:</b> 50 ⭐ <i>(~1 €)</i>\n"
+            "• 🍕 <b>Invitar a una Pizza:</b> 150 ⭐ <i>(~3 €)</i>\n"
+            "• 🚀 <b>Super Sponsor:</b> 500 ⭐ <i>(~10 €)</i>\n\n"
+            "<i>¡Muchas gracias por hacer posible este proyecto! ❤️⚽</i>"
+        )
+        markup = ui.donate_keyboard()
+        if message_id:
+            self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
+        else:
+            self.send_message(chat_id, text, reply_markup=markup)
+
+    def send_stars_invoice(self, chat_id: int, stars: int):
+        title = f"Donación al Proyecto ({stars} ⭐)"
+        desc = "¡Muchas gracias por apoyar el desarrollo y mantenimiento del bot de LaLiga Fantasy!"
+        payload = {
+            "chat_id": chat_id,
+            "title": title,
+            "description": desc,
+            "payload": f"donation_{chat_id}_{stars}_{int(time.time())}",
+            "currency": "XTR",
+            "prices": [{"label": f"{stars} Telegram Stars", "amount": stars}],
+        }
+        res = self._api_call("sendInvoice", payload)
+        if not res:
+            logger.error("Failed to sendInvoice for %d with %d stars", chat_id, stars)
+
+    def handle_pre_checkout_query(self, pcq: Dict[str, Any]):
+        pcq_id = pcq.get("id")
+        if not pcq_id:
+            return
+        self._api_call("answerPreCheckoutQuery", {
+            "pre_checkout_query_id": pcq_id,
+            "ok": True
+        })
+
+    def handle_successful_payment(self, msg: Dict[str, Any]):
+        chat_id = msg.get("chat", {}).get("id")
+        sp = msg.get("successful_payment", {})
+        stars = sp.get("total_amount", 0)
+        from_user = msg.get("from", {})
+        uname = from_user.get("username")
+        u_str = f"@{uname}" if uname else f"ID: {chat_id}"
+
+        # Thank user
+        self.send_message(
+            chat_id,
+            f"🎉 <b>¡Muchísimas gracias por tu donación de {stars} ⭐!</b>\n\n"
+            f"Tu apoyo directo hace posible seguir mejorando el bot y manteniendo los servidores activos. ❤️⚽",
+            reply_markup=ui.back_to_menu_keyboard()
+        )
+
+        # Notify Admin
+        admin_id = os.environ.get("TELEGRAM_ADMIN_CHAT_ID") or "351138675"
+        if admin_id:
+            try:
+                admin_msg = (
+                    f"⭐ <b>¡NUEVA DONACIÓN RECIBIDA!</b>\n\n"
+                    f"👤 <b>De:</b> {from_user.get('first_name', 'Usuario')} ({u_str})\n"
+                    f"💎 <b>Cantidad:</b> <b>{stars} Telegram Stars (XTR)</b>\n"
+                    f"🆔 <b>Telegram Payment ID:</b> <code>{sp.get('telegram_payment_charge_id', 'N/A')}</code>\n"
+                    f"📦 <b>Invoice Payload:</b> <code>{sp.get('invoice_payload', '')}</code>"
+                )
+                self.send_message(int(admin_id), admin_msg)
+            except Exception as e:
+                logger.error("Failed to notify admin of donation: %s", e)
+
     def cmd_tutorial(self, chat_id: int, message_id: Optional[int] = None):
         text = ui.format_tutorial()
         markup = {
