@@ -294,6 +294,11 @@ class TelegramBot:
             self.cmd_report(chat_id, {}, "SUGERENCIA", "")
         elif data == "cmd_bug_btn":
             self.cmd_report(chat_id, {}, "BUG", "")
+        elif data == "cmd_donate":
+            self.cmd_donate(chat_id, message_id=message_id)
+        elif data.startswith("donate_"):
+            stars = int(data.split("donate_")[1])
+            self.send_stars_invoice(chat_id, stars)
         elif data.startswith("rival_"):
             manager_id = data.split("_")[1]
             self.cmd_rival_detail(chat_id, manager_id, message_id=message_id)
