@@ -73,19 +73,47 @@ def lineup_keyboard(can_apply: bool = False) -> Dict[str, Any]:
 
 def flips_keyboard(flips: List[Dict[str, Any]]) -> Dict[str, Any]:
     rows = []
-    for f in flips[:5]:
+    for f in flips[:6]:
         mid = f.get("market_id")
         amt = f.get("buy_price")
         name = f.get("nombre")
         via = f.get("via", "SISTEMA")
         pid = f.get("player_id")
         owner = f.get("owner", "Rival")
+        last_pts = f.get("last_season_points", 0)
+        p_badge = f" | 🏆 {last_pts}p" if last_pts > 0 else ""
+
+        btn_row = []
         if via == "SISTEMA" and mid and amt:
-            rows.append([{"text": f"💰 Pujar por {name} ({amt:,} €)", "callback_data": f"bid_{mid}_{amt}"}])
+            btn_row.append({"text": f"💰 Pujar {name} ({fmt_eur(amt, compact=True)})", "callback_data": f"bid_{mid}_{amt}"})
         elif via == "CLAUSULA" and pid and amt:
-            rows.append([{"text": f"⚡ Clausulazo a {name} ({owner} | {amt:,} €)", "callback_data": f"clause_{pid}_{amt}"}])
+            btn_row.append({"text": f"⚡ Clausulazo {name} ({fmt_eur(amt, compact=True)})", "callback_data": f"clause_{pid}_{amt}"})
+        if pid:
+            btn_row.append({"text": f"🔍 Scout {name}{p_badge}", "callback_data": f"scout_{pid}"})
+        if btn_row:
+            rows.append(btn_row)
+
     if any(f.get("via") == "SISTEMA" for f in flips):
         rows.append([{"text": "🚀 Auto-Pujar por Flips de Mercado", "callback_data": "action_auto_bids"}])
+    rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
+    return {"inline_keyboard": rows}
+
+
+def market_keyboard(market_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    rows = []
+    sorted_items = sorted(
+        market_items,
+        key=lambda x: -(x.get("salePrice") or x.get("price") or (x.get("playerMaster") or {}).get("marketValue") or 0)
+    )
+    for it in sorted_items[:8]:
+        pm = it.get("playerMaster", {})
+        pid = pm.get("id")
+        name = pm.get("nickname") or pm.get("name") or "Jugador"
+        pos = POS.get(pm.get("positionId"), "?")
+        last_pts = int(pm.get("lastSeasonPoints") or 0)
+        p_badge = f" | 🏆 {last_pts} pts" if last_pts > 0 else ""
+        if pid:
+            rows.append([{"text": f"🔍 Scout {name} ({pos}{p_badge})", "callback_data": f"scout_{pid}"}])
     rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
     return {"inline_keyboard": rows}
 
@@ -504,23 +532,42 @@ def format_team_scouting_report(ts: Dict[str, Any]) -> str:
 
 
 def format_market(market_items: List[Dict[str, Any]]) -> str:
-    lines = ["🛒 <b>Mercado de Fichajes en Vivo</b>\n"]
-    sorted_items = sorted(market_items, key=lambda x: -(x.get("price") or x.get("playerMaster", {}).get("marketValue") or 0))
+    lines = [
+        "🛒 <b>Mercado de Fichajes en Vivo</b>",
+        "<i>Todos los jugadores actualmente a subasta en tu liga:</i>\n"
+    ]
+    sorted_items = sorted(
+        market_items,
+        key=lambda x: -(x.get("salePrice") or x.get("price") or (x.get("playerMaster") or {}).get("marketValue") or 0)
+    )
+
+    if not sorted_items:
+        lines.append("📭 No hay jugadores en subasta en este momento.")
+        return "\n".join(lines)
 
     for it in sorted_items[:12]:
         pm = it.get("playerMaster", {})
         pos = POS.get(pm.get("positionId"), "?")
         name = pm.get("nickname") or pm.get("name") or "Jugador"
-        price = it.get("price") or pm.get("marketValue") or 0
-        clause = it.get("buyoutClause") or pm.get("marketValue") or 0
+        price = it.get("salePrice") or it.get("price") or pm.get("marketValue") or 0
+        clause = it.get("playerTeam", {}).get("buyoutClause") or it.get("buyoutClause") or pm.get("marketValue") or 0
         last_pts = int(pm.get("lastSeasonPoints") or 0)
-        pts_badge = f"  |  🏆 Pasada: <b>{last_pts} pts</b>" if last_pts > 0 else ""
+        pts_badge = f"  |  🏆 Año pasado: <b>{last_pts} pts</b>" if last_pts > 0 else ""
+
+        discr = it.get("discr", "")
+        if discr == "marketPlayerLeague":
+            origin = "🏛 Mercado Libre"
+        else:
+            mgr = it.get("sellerTeam", {}).get("manager", {}).get("managerName") or "Rival"
+            origin = f"👤 Rival: {mgr}"
+
         lines.append(
             f"• <b>{name}</b> ({pos}){pts_badge}\n"
-            f"  💵 Precio: {fmt_eur(price)}  |  🔒 Cláusula: {fmt_eur(clause, compact=True)}\n"
+            f"  💵 <b>Precio:</b> {fmt_eur(price)}  |  🔒 <b>Cláusula:</b> {fmt_eur(clause, compact=True)}\n"
+            f"  🏷 <i>{origin}</i>\n"
         )
 
-    lines.append("<i>💡 Escribe /scout <nombre> para ver el informe histórico de cualquier jugador.</i>")
+    lines.append("<i>💡 Pulsa en cualquier botón abajo para ver el informe de scouting completo.</i>")
     return "\n".join(lines)
 
 

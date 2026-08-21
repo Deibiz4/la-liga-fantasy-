@@ -659,7 +659,7 @@ class TelegramBot:
             lid, _ = client.default_ids()
             market_items = client.market(lid) or []
             text = ui.format_market(market_items)
-            markup = ui.back_to_menu_keyboard()
+            markup = ui.market_keyboard(market_items)
             if message_id:
                 self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
             else:
@@ -754,8 +754,10 @@ class TelegramBot:
                     owner = f.get("owner", "Mercado Libre")
                     icon = "⚡" if via == "CLAUSULA" else "🛒"
                     diff_sign = "+" if f.get("margin", 0) >= 0 else ""
+                    last_p = f.get("last_season_points", 0)
+                    p_badge = f" | 🏆 Pasada: <b>{last_p} pts</b>" if last_p > 0 else ""
                     lines.append(
-                        f"{icon} <b>{f['nombre']}</b> ({f['pos']})\n"
+                        f"{icon} <b>{f['nombre']}</b> ({f['pos']}){p_badge}\n"
                         f"  • 👤 <b>Origen:</b> {via} <i>({owner})</i>\n"
                         f"  • 💵 <b>Precio:</b> {ui.fmt_eur(f['buy_price'])}\n"
                         f"  • 📈 <b>Proy. 7d:</b> {ui.fmt_eur(f['proyeccion'])}\n"

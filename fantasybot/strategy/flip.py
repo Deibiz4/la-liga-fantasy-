@@ -89,6 +89,7 @@ def evaluate(element, index, horizon):
         "proyeccion": round(proj),
         "margin": round(margin),
         "margin_pct": round(margin / buy_price * 100, 1) if buy_price else 0,
+        "last_season_points": int(pm.get("lastSeasonPoints") or 0),
         "rate_dia": round(daily_rate(trend)),
         "tendencia": trend.get("tendencia"),
     }
