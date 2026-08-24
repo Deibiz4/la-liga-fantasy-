@@ -227,6 +227,7 @@ def analyze_league_trading_history(
         activity_live = client.league_activity(league_id, fetch_all=True) or []
     activity_cumulative = state.record_activity(activity_live, league_id)
 
+    teams = client.league_teams(league_id) or []
     player_names = resolve_player_names(client, activity_cumulative, teams)
 
     results = []
