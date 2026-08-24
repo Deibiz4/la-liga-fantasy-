@@ -18,7 +18,25 @@ import threading
 
 _PENDING_PKCE: Dict[int, Dict[str, Any]] = {}
 _REGISTRY_LOCK = threading.Lock()
+_USER_NAMES: Dict[int, str] = {}
 TELEGRAM_SESSIONS_DIR = os.path.join(config.ROOT, ".state", "telegram_users")
+
+
+def get_user_display_name(chat_id: int) -> str:
+    if chat_id in _USER_NAMES:
+        return _USER_NAMES[chat_id]
+    reg = _load_registry()
+    u_data = reg.get(str(chat_id), {})
+    name = u_data.get("first_name") or u_data.get("username")
+    if name:
+        _USER_NAMES[chat_id] = name
+        return name
+    return "Manager"
+
+
+def set_user_display_name(chat_id: int, name: str):
+    if name:
+        _USER_NAMES[chat_id] = name
 
 
 def _ensure_dir():

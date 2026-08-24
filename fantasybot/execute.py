@@ -47,7 +47,9 @@ def plan_bids(client, league_id, team, ops=None):
     plan, committed = [], 0
     for o in ops:
         if o["market_id"] in already:
-            continue  # we already have a bid
+            continue  # we already have a bid in local state
+        if o.get("has_my_bid"):
+            continue  # we already have an active bid on the server
         if committed + o["buy_price"] > money:
             continue  # doesn't fit in the balance
         plan.append({"market_id": o["market_id"], "nombre": o["nombre"],
@@ -79,13 +81,22 @@ def sync_bids(client, league_id, team, dry_run=True):
     # place new bids
     for b in plan:
         if not dry_run:
-            resp = client.make_bid(league_id, b["market_id"], b["amount"])
-            bid_id = resp.get("id") if isinstance(resp, dict) else None
-            bids[b["market_id"]] = {"bid_id": bid_id, "amount": b["amount"],
-                                    "nombre": b["nombre"]}
-            events.emit("bid", f"Bid {b['amount']:,} for {b['nombre']}",
-                        detail={"margin": f"{b['margin_pct']}%"})
-        placed.append(b)
+            try:
+                resp = client.make_bid(league_id, b["market_id"], b["amount"])
+                bid_id = resp.get("id") if isinstance(resp, dict) else None
+                bids[b["market_id"]] = {"bid_id": bid_id, "amount": b["amount"],
+                                        "nombre": b["nombre"]}
+                events.emit("bid", f"Bid {b['amount']:,} for {b['nombre']}",
+                            detail={"margin": f"{b['margin_pct']}%"})
+                placed.append(b)
+            except Exception as e:
+                # If we already have a pending bid on this player, record it and continue gracefully
+                if "030.01.09" in str(e) or "pending bid" in str(e).lower():
+                    bids[b["market_id"]] = {"amount": b["amount"], "nombre": b["nombre"]}
+                else:
+                    raise
+        else:
+            placed.append(b)
 
     if not dry_run:
         state.save_bids(bids)

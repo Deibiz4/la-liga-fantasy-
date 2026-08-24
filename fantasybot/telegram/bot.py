@@ -349,14 +349,8 @@ class TelegramBot:
     def cmd_start(self, chat_id: int, message_id: Optional[int] = None):
         logged_in = sessions.is_user_logged_in(chat_id)
         if logged_in:
-            try:
-                client = sessions.get_client_for_user(chat_id)
-                me = client.me()
-                user_name = me.get("managerName") or me.get("nickname") or me.get("name") or "Manager"
-                status_text = f"✅ Conectado como <b>{user_name}</b>"
-            except Exception:
-                status_text = "⚠️ Sesión expirada o no iniciada"
-                logged_in = False
+            user_name = sessions.get_user_display_name(chat_id)
+            status_text = f"✅ Conectado como <b>{html.escape(user_name)}</b>"
         else:
             status_text = "🔒 No has iniciado sesión todavía"
 
