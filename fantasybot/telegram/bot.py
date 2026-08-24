@@ -42,7 +42,13 @@ class TelegramBot:
         self.offset = 0
         self.running = False
 
-    def _api_call(self, method: str, data: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+    def _api_call(
+        self,
+        method: str,
+        data: Optional[Dict[str, Any]] = None,
+        timeout: int = 12,
+        retries: int = 1,
+    ) -> Optional[Dict[str, Any]]:
         url = f"{self.base_url}/{method}"
         headers = {"User-Agent": "FantasyBot-Telegram/1.0"}
         body = None
@@ -50,24 +56,32 @@ class TelegramBot:
             headers["Content-Type"] = "application/json"
             body = json.dumps(data).encode("utf-8")
 
-        req = urllib.request.Request(url, data=body, headers=headers, method="POST" if body else "GET")
-        try:
-            with urllib.request.urlopen(req, timeout=35) as resp:
-                res = json.loads(resp.read().decode("utf-8"))
-                if res.get("ok"):
-                    return res.get("result")
+        # A short timeout plus a retry keeps a single stalled connection from
+        # freezing the user's menu: a hung request costs `timeout` seconds, not
+        # the minutes a long timeout would.
+        for attempt in range(retries + 1):
+            req = urllib.request.Request(url, data=body, headers=headers, method="POST" if body else "GET")
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    res = json.loads(resp.read().decode("utf-8"))
+                    if res.get("ok"):
+                        return res.get("result")
+                    return None
+            except urllib.error.HTTPError as e:
+                err_body = e.read().decode("utf-8", errors="ignore")
+                if "message is not modified" in err_body:
+                    return {"ok": True, "result": True, "unmodified": True}
+                if "query is too old" in err_body:
+                    return None
+                logger.error("Telegram API Error %d %s: %s", e.code, e.reason, err_body)
                 return None
-        except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="ignore")
-            if "message is not modified" in err_body:
-                return {"ok": True, "result": True, "unmodified": True}
-            if "query is too old" in err_body:
+            except Exception as e:
+                if attempt < retries:
+                    logger.warning("Retrying Telegram API %s after network error: %s", method, e)
+                    continue
+                logger.error("Network error on Telegram API %s: %s", method, e)
                 return None
-            logger.error("Telegram API Error %d %s: %s", e.code, e.reason, err_body)
-            return None
-        except Exception as e:
-            logger.error("Network error on Telegram API %s: %s", method, e)
-            return None
+        return None
 
     def send_message(
         self,
@@ -1325,6 +1339,9 @@ class TelegramBot:
 
     def start_polling(self):
         import socket
+        from .. import net as net_mod
+
+        net_mod.prefer_ipv4()
         socket.setdefaulttimeout(15)
         self.running = True
         print("[Telegram Bot] Polling daemon started successfully.", flush=True)
@@ -1337,10 +1354,13 @@ class TelegramBot:
         with ThreadPoolExecutor(max_workers=16) as executor:
             while self.running:
                 try:
-                    updates = self._api_call("getUpdates", {
-                        "offset": self.offset,
-                        "timeout": 10,
-                    })
+                    updates = self._api_call(
+                        "getUpdates",
+                        {"offset": self.offset, "timeout": 10},
+                        # Must outlast the 10s server-side long poll.
+                        timeout=25,
+                        retries=0,
+                    )
                     if updates:
                         for upd in updates:
                             upd_id = upd.get("update_id", 0)

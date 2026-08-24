@@ -28,3 +28,32 @@ def get(url: str, timeout: int = 20, retries: int = 3) -> str:
                 continue
             raise
     raise RuntimeError(f"No response after {retries} retries: {url}")
+
+
+def prefer_ipv4():
+    """Makes address resolution return IPv4 first.
+
+    On hosts with a flaky IPv6 path (common on VPS providers), Python tries the
+    AAAA record first and blocks for the whole socket timeout before falling
+    back to IPv4 -- freezing a Telegram menu for 35s. Unlike curl, urllib has no
+    Happy Eyeballs fallback. Sorting IPv4 first avoids the stall while keeping
+    IPv6 as fallback for IPv6-only hosts.
+
+    Disable with FANTASYBOT_PREFER_IPV4=0.
+    """
+    import os
+    import socket
+
+    if os.environ.get("FANTASYBOT_PREFER_IPV4", "1") == "0":
+        return
+    if getattr(socket, "_fantasybot_ipv4_first", False):
+        return
+
+    original = socket.getaddrinfo
+
+    def getaddrinfo_ipv4_first(*args, **kwargs):
+        res = original(*args, **kwargs)
+        return sorted(res, key=lambda entry: 0 if entry[0] == socket.AF_INET else 1)
+
+    socket.getaddrinfo = getaddrinfo_ipv4_first
+    socket._fantasybot_ipv4_first = True

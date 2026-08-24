@@ -30,6 +30,7 @@ from .strategy import clause_steals as clause_steals_mod
 from . import agent as agent_mod
 from . import execute as execute_mod
 from . import events
+from . import net
 from . import state
 
 
@@ -916,6 +917,7 @@ def build_parser():
 
 
 def main(argv=None):
+    net.prefer_ipv4()
     if hasattr(sys.stdout, "reconfigure"):
         try:
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
