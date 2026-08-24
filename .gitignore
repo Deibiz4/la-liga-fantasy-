@@ -3,6 +3,7 @@ tokens.json
 .pkce.json
 .env
 *.token
+SERVER_CONFIG.md
 
 # Scrape cache and agent state (regenerable)
 .cache/

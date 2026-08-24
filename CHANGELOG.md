@@ -37,11 +37,20 @@ All notable changes to the **fantasybot** project for rival tracking, transfer a
 #### 5. Windows Control Panel & Launcher (`iniciar_bot.bat`, `start.bat`)
 - Interactive batch launcher with UTF-8 encoding support, automatic Python detection, and 1-click execution for Telegram daemon, Mission Control web UI, User Stats, Agent Review, OAuth Login, and Clause Steals Scanner.
 
-#### 6. Unit Tests (`tests/test_clause_steals.py`)
+#### 6. VPS Deployment (`deploy/fantasybot.service`, `SERVER_CONFIG.md`)
+- **Systemd unit** for running the Telegram daemon as a managed service on a VPS (`Restart=always`, unbuffered output to `journalctl`).
+- **Server inventory document** (`SERVER_CONFIG.md`, gitignored) with VPS ports, paths, and per-project isolation guidelines.
+
+#### 7. Unit Tests (`tests/test_clause_steals.py`)
 - Added unit tests covering positive ROI clause flips, falling trend safeguards, own-player exclusions, and manager/rank filtering.
 - **74/74 unit tests passing**.
 
 ### Fixed & Hardened
+
+- **35-Second Menu Freezes on VPS — Flaky IPv6 Fallback (`fantasybot/net.py`, `fantasybot/cli.py`, `fantasybot/telegram/bot.py`)**: Telegram menus stalled for exactly 35s at random once deployed on the VPS. Root cause: `api.telegram.org` resolves to both IPv4 and IPv6, the host's IPv6 path intermittently blackholes, and `urllib` (unlike `curl`, which implements Happy Eyeballs) tries the AAAA address first and blocks for the **entire socket timeout** before falling back to IPv4.
+  - **`net.prefer_ipv4()`**: Sorts `getaddrinfo` results IPv4-first while keeping IPv6 as fallback (still works on IPv6-only hosts). Applied at CLI startup and in the Telegram polling daemon, so it also covers the LaLiga Fantasy API and FutbolFantasy scrapes. Escape hatch: `FANTASYBOT_PREFER_IPV4=0`.
+  - **Bounded Telegram timeouts (`_api_call`)**: Reduced from a fixed 35s to 12s with one automatic retry, so a stalled connection costs seconds instead of freezing the user's menu; `getUpdates` keeps a 25s timeout to outlast its 10s server-side long poll.
+  - **Measured on the VPS**: cold requests went from 60.17s / 30.15s stalls to a steady 0.09–0.16s (8/8 requests).
 
 - **Live Buyout Clause Resolution & 409 Error Prevention (`fantasybot/telegram/bot.py`, `fantasybot/cli.py`)**: Resolves live `buyoutClause` and `buyoutClauseLockedEndTime` before submitting `pay_buyout_clause`, avoiding `409 Buyout wanted to pay is not updated` and displaying friendly error / balance requirement messages.
 - **Position Lookup Name Definition**: Imported `POS` in `fantasybot/telegram/bot.py` to prevent `NameError: name 'POS' is not defined`.
