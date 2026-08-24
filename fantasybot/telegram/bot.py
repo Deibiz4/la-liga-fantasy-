@@ -16,11 +16,13 @@ from typing import Dict, Any, Optional
 
 from .. import auth
 from .. import config
+from ..matching import POS
 from .. import execute as execute_mod
 from .. import agent as agent_mod
 from ..strategy import rivals as rivals_mod
 from ..strategy import history as history_mod
 from ..strategy import flip as flip_mod
+from ..strategy import clause_steals as clause_steals_mod
 from ..strategy import lineup as lineup_opt
 from ..sources.market_trends import market_trends
 from . import sessions
@@ -200,6 +202,10 @@ class TelegramBot:
             self.cmd_leagues(chat_id)
         elif text.startswith("/lineup"):
             self.cmd_lineup(chat_id)
+        elif text.startswith("/clausulas") or text.startswith("/clausulazos") or text.startswith("/steals") or text.startswith("/robos"):
+            parts = text.split(maxsplit=1)
+            query = parts[1] if len(parts) > 1 else None
+            self.cmd_clause_steals(chat_id, query)
         elif text.startswith("/autopilot") or text.startswith("/run"):
             self.cmd_autopilot(chat_id)
         elif text.startswith("/settings") or text.startswith("/ajustes"):
@@ -271,6 +277,8 @@ class TelegramBot:
             self.cmd_trends(chat_id, message_id=message_id)
         elif data == "cmd_flip":
             self.cmd_flip(chat_id, message_id=message_id)
+        elif data == "cmd_clausulas" or data == "cmd_steals":
+            self.cmd_clause_steals(chat_id, message_id=message_id)
         elif data == "cmd_lineup":
             self.cmd_lineup(chat_id, message_id=message_id)
         elif data == "cmd_autopilot":
@@ -320,8 +328,11 @@ class TelegramBot:
             manager_id = data.split("_")[1]
             self.cmd_history_detail(chat_id, manager_id, message_id=message_id)
         elif data.startswith("scout_"):
-            pid = data.split("scout_")[1]
-            self.cmd_scout(chat_id, pid, message_id=message_id)
+            raw = data[6:]
+            parts = raw.split("_", 1)
+            pid = parts[0]
+            origin = parts[1] if len(parts) > 1 else None
+            self.cmd_scout(chat_id, pid, origin=origin, message_id=message_id)
         elif data == "cmd_scout_team":
             self.cmd_scout_team(chat_id, message_id=message_id)
 
@@ -372,7 +383,8 @@ class TelegramBot:
             "• /market - Jugadores en venta en el mercado de tu liga\n"
             "• /scout <jugador> - Informe histórico, titularidad y evolución\n"
             "• /trends - Jugadores que más suben y bajan en LaLiga\n"
-            "• /flip - Oportunidades de reventa y pujas\n\n"
+            "• /flip - Oportunidades de reventa y pujas en mercado libre\n"
+            "• /clausulas [rival] - Detectar robos, flips de cláusula y chollos rivales\n\n"
             "🚀 <b>Autopilot y Ajustes:</b>\n"
             "• /autopilot - Ejecutar alineación óptima y auto-pujas\n"
             "• /settings - Configurar alertas y notificaciones inteligentes\n\n"
@@ -592,7 +604,7 @@ class TelegramBot:
                 self.send_message(chat_id, "Rival no encontrado.")
                 return
             text = ui.format_rival_detail(matched[0])
-            markup = ui.back_to_menu_keyboard()
+            markup = ui.rival_detail_keyboard()
             if message_id:
                 self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
             else:
@@ -651,7 +663,7 @@ class TelegramBot:
                 self.send_message(chat_id, "Manager no encontrado.")
                 return
             text = ui.format_manager_history(matched[0])
-            markup = ui.back_to_menu_keyboard()
+            markup = ui.history_detail_keyboard()
             if message_id:
                 self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
             else:
@@ -679,7 +691,7 @@ class TelegramBot:
         try:
             trends = market_trends()
             text = ui.format_trends(trends)
-            markup = ui.back_to_menu_keyboard()
+            markup = ui.trends_keyboard()
             if message_id:
                 self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
             else:
@@ -687,7 +699,7 @@ class TelegramBot:
         except Exception as e:
             self.send_message(chat_id, f"❌ Error al cargar tendencias: {e}")
 
-    def cmd_scout(self, chat_id: int, query: Optional[str] = None, message_id: Optional[int] = None):
+    def cmd_scout(self, chat_id: int, query: Optional[str] = None, origin: Optional[str] = None, message_id: Optional[int] = None):
         client = self._get_client_or_ask_login(chat_id)
         if not client:
             return
@@ -715,7 +727,7 @@ class TelegramBot:
 
             scout_data = scouting_mod.analyze_player_profile(matched_pm)
             text = ui.format_scouting_card(scout_data)
-            markup = ui.back_to_menu_keyboard()
+            markup = ui.scout_card_keyboard(player_id=matched_pm.get("id"), origin=origin)
             if message_id:
                 self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
             else:
@@ -780,6 +792,24 @@ class TelegramBot:
                 self.send_message(chat_id, text, reply_markup=markup)
         except Exception as e:
             self.send_message(chat_id, f"❌ Error al buscar flips: {e}")
+
+    def cmd_clause_steals(self, chat_id: int, query: Optional[str] = None, message_id: Optional[int] = None):
+        client = self._get_client_or_ask_login(chat_id)
+        if not client:
+            return
+        try:
+            lid, tid = client.default_ids()
+            team_data = client.team(lid, tid)
+            my_money = team_data.get("teamMoney", 0)
+            steals = clause_steals_mod.find_rival_clause_flips(client, lid, manager_query=query)
+            text = ui.format_clause_steals(steals, my_balance=my_money)
+            markup = ui.clause_steals_keyboard(steals, my_balance=my_money)
+            if message_id:
+                self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
+            else:
+                self.send_message(chat_id, text, reply_markup=markup)
+        except Exception as e:
+            self.send_message(chat_id, f"❌ Error al buscar clausulazos de rivales: {e}", reply_markup=ui.back_to_menu_keyboard())
 
     def cmd_lineup(self, chat_id: int, message_id: Optional[int] = None):
         client = self._get_client_or_ask_login(chat_id)
@@ -870,7 +900,7 @@ class TelegramBot:
                 f"🎉 <b>¡Alineación Guardada con Éxito!</b>\n\n"
                 f"Se ha aplicado tu <b>XI Óptimo ({d}-{m}-{f})</b> directamente en tu cuenta oficial de LaLiga Fantasy. ⚽"
             )
-            self.send_message(chat_id, text, reply_markup=ui.back_to_menu_keyboard())
+            self.send_message(chat_id, text, reply_markup=ui.action_success_keyboard("lineup"))
         except Exception as e:
             self.send_message(chat_id, f"❌ Error al aplicar alineación: {e}", reply_markup=ui.back_to_menu_keyboard())
 
@@ -885,7 +915,7 @@ class TelegramBot:
                 f"✅ <b>¡Puja Realizada con Éxito!</b>\n\n"
                 f"Has pujado <b>{amount:,} €</b> por el jugador en el mercado de tu liga. 🛒"
             )
-            self.send_message(chat_id, text, reply_markup=ui.back_to_menu_keyboard())
+            self.send_message(chat_id, text, reply_markup=ui.action_success_keyboard("bid"))
         except Exception as e:
             self.send_message(chat_id, f"❌ Error al realizar puja: {e}", reply_markup=ui.back_to_menu_keyboard())
 
@@ -894,15 +924,91 @@ class TelegramBot:
         if not client:
             return
         try:
-            lid, _ = client.default_ids()
-            client.pay_buyout_clause(lid, player_id, amount)
+            lid, tid = client.default_ids()
+            my_team = client.team(lid, tid)
+            my_money = my_team.get("teamMoney", 0)
+
+            # Find player in league teams to get exact live clause, lock time, and name/owner
+            teams = client.league_teams(lid) or []
+            target_player = None
+            target_owner = "Rival"
+            for t in teams:
+                for p in t.get("players", []) or []:
+                    pm = p.get("playerMaster") or {}
+                    if str(pm.get("id")) == str(player_id):
+                        target_player = p
+                        target_owner = (t.get("manager") or {}).get("managerName") or "Rival"
+                        break
+                if target_player:
+                    break
+
+            if not target_player:
+                self.send_message(
+                    chat_id,
+                    f"❌ No se encontró al jugador con ID <code>{player_id}</code> en las plantillas de tu liga.",
+                    reply_markup=ui.back_to_menu_keyboard()
+                )
+                return
+
+            pm = target_player.get("playerMaster") or {}
+            pname = pm.get("nickname") or pm.get("name") or "Jugador"
+            pos = POS.get(pm.get("positionId"), "")
+            live_clause = target_player.get("buyoutClause") or 0
+            if live_clause <= 0:
+                mv = pm.get("marketValue") or 0
+                live_clause = round(mv * 1.67) if mv else amount
+
+            lock_time = target_player.get("buyoutClauseLockedEndTime")
+            if lock_time:
+                try:
+                    from datetime import datetime
+                    clean_iso = lock_time.replace("Z", "+00:00")
+                    dt_unlock = datetime.fromisoformat(clean_iso)
+                    now = datetime.now(dt_unlock.tzinfo)
+                    if now < dt_unlock:
+                        self.send_message(
+                            chat_id,
+                            f"🔒 <b>Cláusula Bloqueada:</b>\n\n"
+                            f"La cláusula de <b>{ui.h(pname)}</b> está protegida temporalmente hasta el <b>{dt_unlock.strftime('%d/%m/%Y a las %H:%M')}</b>.",
+                            reply_markup=ui.action_success_keyboard("clause")
+                        )
+                        return
+                except Exception:
+                    pass
+
+            if my_money < live_clause:
+                self.send_message(
+                    chat_id,
+                    f"💰 <b>Saldo Insuficiente:</b>\n\n"
+                    f"La cláusula actual de <b>{ui.h(pname)}</b> ({ui.h(pos)}) es de <b>{live_clause:,} €</b>, "
+                    f"pero tu saldo disponible es de <b>{my_money:,} €</b>.\n"
+                    f"<i>(Te faltan {(live_clause - my_money):,} € para poder pagarla).</i>",
+                    reply_markup=ui.action_success_keyboard("clause")
+                )
+                return
+
+            # Execute buyout with exact live clause
+            client.pay_buyout_clause(lid, player_id, live_clause)
+            from .. import events
+            events.emit("clause", f"Buyout clause: {pname} ({player_id}) from {target_owner} for {live_clause:,}")
+
             text = (
                 f"⚡ <b>¡Clausulazo Ejecutado con Éxito!</b>\n\n"
-                f"Has pagado la cláusula de rescisión de <b>{amount:,} €</b> por el jugador. 💥"
+                f"💥 Has pagado la cláusula de <b>{live_clause:,} €</b> por <b>{ui.h(pname)}</b> ({ui.h(pos)}).\n"
+                f"👤 <b>Ex-Dueño:</b> {ui.h(target_owner)}\n"
+                f"💵 <b>Nuevo Saldo Restante:</b> {(my_money - live_clause):,} €\n\n"
+                f"¡El jugador ya forma parte de tu plantilla! ⚽"
             )
-            self.send_message(chat_id, text, reply_markup=ui.back_to_menu_keyboard())
+            self.send_message(chat_id, text, reply_markup=ui.action_success_keyboard("clause"))
         except Exception as e:
-            self.send_message(chat_id, f"❌ Error al pagar cláusula: {e}", reply_markup=ui.back_to_menu_keyboard())
+            err_str = str(e)
+            if "030.01.49" in err_str or "not updated" in err_str:
+                msg = "⚠️ La cláusula de rescisión cambió recientemente en el servidor. Vuelve a abrir /clausulas para ver el valor actualizado."
+            elif "030.01.48" in err_str or "locked" in err_str.lower():
+                msg = "🔒 La cláusula de este jugador está bloqueada temporalmente por LaLiga."
+            else:
+                msg = f"❌ Error al pagar cláusula: <code>{err_str}</code>"
+            self.send_message(chat_id, msg, reply_markup=ui.action_success_keyboard("clause"))
 
     def cmd_auto_bids(self, chat_id: int, message_id: Optional[int] = None):
         client = self._get_client_or_ask_login(chat_id)

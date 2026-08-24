@@ -28,31 +28,29 @@ def main_menu_keyboard(logged_in: bool = True) -> Dict[str, Any]:
                 {"text": "⚔️ Rivales & Finanzas", "callback_data": "cmd_rivals"},
             ],
             [
-                {"text": "📊 Histórico & Flips", "callback_data": "cmd_history"},
+                {"text": "📊 Histórico & P/L", "callback_data": "cmd_history"},
                 {"text": "🛒 Mercado en Vivo", "callback_data": "cmd_market"},
             ],
             [
+                {"text": "🔄 Flips de Mercado", "callback_data": "cmd_flip"},
+                {"text": "⚡ Clausulazos & Robos", "callback_data": "cmd_clausulas"},
+            ],
+            [
                 {"text": "⚽ Alineación Óptima", "callback_data": "cmd_lineup"},
-                {"text": "🔄 Oportunidades (Flip)", "callback_data": "cmd_flip"},
-            ],
-            [
                 {"text": "🚀 Autopilot Completo", "callback_data": "cmd_autopilot"},
+            ],
+            [
                 {"text": "⚙️ Ajustes & Alertas", "callback_data": "cmd_settings"},
-            ],
-            [
                 {"text": "🏆 Mis Ligas / Cambiar", "callback_data": "cmd_leagues"},
+            ],
+            [
                 {"text": "👤 Mi Perfil", "callback_data": "cmd_me"},
+                {"text": "💡 Sugerencias & Bugs", "callback_data": "cmd_sugerencia_btn"},
             ],
             [
-                {"text": "💡 Enviar Sugerencia", "callback_data": "cmd_sugerencia_btn"},
-                {"text": "🐛 Reportar Bug", "callback_data": "cmd_bug_btn"},
-            ],
-            [
-                {"text": "💖 Apoyar / Donar ⭐", "callback_data": "cmd_donate"},
-                {"text": "ℹ️ Ayuda & Comandos", "callback_data": "cmd_help"},
-            ],
-            [
-                {"text": "📖 Tutorial Paso a Paso", "callback_data": "cmd_tutorial"},
+                {"text": "💖 Donar ⭐", "callback_data": "cmd_donate"},
+                {"text": "ℹ️ Ayuda", "callback_data": "cmd_help"},
+                {"text": "📖 Tutorial", "callback_data": "cmd_tutorial"},
             ]
         ]
     }
@@ -95,12 +93,13 @@ def flips_keyboard(flips: List[Dict[str, Any]]) -> Dict[str, Any]:
         elif via == "CLAUSULA" and pid and amt:
             btn_row.append({"text": f"⚡ Clausulazo {name} ({fmt_eur(amt, compact=True)})", "callback_data": f"clause_{pid}_{amt}"})
         if pid:
-            btn_row.append({"text": f"🔍 Scout {name}{p_badge}", "callback_data": f"scout_{pid}"})
+            btn_row.append({"text": f"🔍 Scout {name}{p_badge}", "callback_data": f"scout_{pid}_flip"})
         if btn_row:
             rows.append(btn_row)
 
     if any(f.get("via") == "SISTEMA" for f in flips):
         rows.append([{"text": "🚀 Auto-Pujar por Flips de Mercado", "callback_data": "action_auto_bids"}])
+    rows.append([{"text": "⚡ Ver Clausulazos & Robos a Rivales", "callback_data": "cmd_clausulas"}])
     rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
     return {"inline_keyboard": rows}
 
@@ -119,7 +118,7 @@ def market_keyboard(market_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         last_pts = int(pm.get("lastSeasonPoints") or 0)
         p_badge = f" | 🏆 {last_pts} pts" if last_pts > 0 else ""
         if pid:
-            rows.append([{"text": f"🔍 Scout {name} ({pos}{p_badge})", "callback_data": f"scout_{pid}"}])
+            rows.append([{"text": f"🔍 Scout {name} ({pos}{p_badge})", "callback_data": f"scout_{pid}_market"}])
     rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
     return {"inline_keyboard": rows}
 
@@ -144,7 +143,7 @@ def scout_team_keyboard(players: List[Dict[str, Any]]) -> Dict[str, Any]:
         last_pts = int(pm.get("lastSeasonPoints") or 0)
         p_badge = f"{last_pts} pts" if last_pts > 0 else "Nuevo"
         if pid:
-            rows.append([{"text": f"🔍 {name} ({pos} | 🏆 {p_badge})", "callback_data": f"scout_{pid}"}])
+            rows.append([{"text": f"🔍 {name} ({pos} | 🏆 {p_badge})", "callback_data": f"scout_{pid}_team"}])
     rows.append([{"text": "🔙 Volver a Mi Plantilla", "callback_data": "cmd_team"}])
     rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
     return {"inline_keyboard": rows}
@@ -205,6 +204,73 @@ def back_to_menu_keyboard() -> Dict[str, Any]:
             [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]
         ]
     }
+
+
+def rival_detail_keyboard() -> Dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [{"text": "⚔️ Volver a Lista de Rivales", "callback_data": "cmd_rivals"}],
+            [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]
+        ]
+    }
+
+
+def history_detail_keyboard() -> Dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [{"text": "📊 Volver a Histórico & P/L", "callback_data": "cmd_history"}],
+            [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]
+        ]
+    }
+
+
+def trends_keyboard() -> Dict[str, Any]:
+    return {
+        "inline_keyboard": [
+            [{"text": "🛒 Volver a Mercado en Vivo", "callback_data": "cmd_market"}],
+            [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]
+        ]
+    }
+
+
+def action_success_keyboard(action_type: str = "generic") -> Dict[str, Any]:
+    rows = []
+    if action_type == "clause":
+        rows.append([{"text": "⚡ Volver a Clausulazos & Robos", "callback_data": "cmd_clausulas"}])
+        rows.append([{"text": "📋 Ver Mi Plantilla", "callback_data": "cmd_team"}])
+    elif action_type == "bid":
+        rows.append([{"text": "🔄 Volver a Flips de Mercado", "callback_data": "cmd_flip"}])
+        rows.append([{"text": "🛒 Ver Mercado en Vivo", "callback_data": "cmd_market"}])
+    elif action_type == "lineup":
+        rows.append([{"text": "⚽ Ver Mi Alineación", "callback_data": "cmd_lineup"}])
+        rows.append([{"text": "📋 Ver Mi Plantilla", "callback_data": "cmd_team"}])
+    elif action_type == "sell":
+        rows.append([{"text": "📋 Volver a Mi Plantilla", "callback_data": "cmd_team"}])
+        rows.append([{"text": "🛒 Ver Mercado en Vivo", "callback_data": "cmd_market"}])
+    rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
+    return {"inline_keyboard": rows}
+
+
+def scout_card_keyboard(player_id: Optional[str] = None, origin: Optional[str] = None) -> Dict[str, Any]:
+    rows = []
+    if origin == "clausulas":
+        rows.append([{"text": "⚡ Volver a Clausulazos & Robos", "callback_data": "cmd_clausulas"}])
+    elif origin == "market":
+        rows.append([{"text": "🛒 Volver a Mercado en Vivo", "callback_data": "cmd_market"}])
+    elif origin == "flip":
+        rows.append([{"text": "🔄 Volver a Flips de Mercado", "callback_data": "cmd_flip"}])
+    elif origin == "team":
+        rows.append([{"text": "📋 Volver a Mi Plantilla", "callback_data": "cmd_team"}])
+    elif origin == "rivals":
+        rows.append([{"text": "⚔️ Volver a Rivales & Finanzas", "callback_data": "cmd_rivals"}])
+    else:
+        rows.append([
+            {"text": "⚡ Clausulazos", "callback_data": "cmd_clausulas"},
+            {"text": "🛒 Mercado", "callback_data": "cmd_market"},
+            {"text": "📋 Plantilla", "callback_data": "cmd_team"},
+        ])
+    rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
+    return {"inline_keyboard": rows}
 
 
 def rivals_keyboard(rivals: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -657,3 +723,69 @@ def format_admin_stats(stats: Dict[str, Any]) -> str:
         lines.append(f"<i>...y {len(users) - 20} usuarios más en el registro.</i>")
 
     return "\n".join(lines)
+
+
+def format_clause_steals(steals: List[Dict[str, Any]], my_balance: int = 0, horizon: int = 7) -> str:
+    if not steals:
+        return (
+            "⚡ <b>Clausulazos & Robos a Rivales</b>\n\n"
+            "No se han detectado jugadores rivales con oportunidades claras de robo o flip de cláusula con los filtros actuales."
+        )
+
+    lines = [
+        "⚡ <b>Rival Clause Robbery & Flips</b>",
+        f"<i>Cruce de cláusulas rivales con tendencias a {horizon} días:</i>\n",
+        f"💰 <b>Tu Saldo:</b> {fmt_eur(my_balance)}\n"
+    ]
+
+    for idx, s in enumerate(steals[:8], 1):
+        name = s.get("name")
+        pos = s.get("pos")
+        mgr = s.get("manager_name", "Rival")
+        clause = s.get("buyout_clause", 0)
+        rate = s.get("rate_dia", 0)
+        proj = s.get("proyeccion", 0)
+        margin = s.get("margin", 0)
+        roi = s.get("margin_pct", 0.0)
+        badge = s.get("badge", "")
+        ratio = s.get("clause_ratio", 1.0)
+        last_p = s.get("last_season_points", 0)
+        p_badge = f" | 🏆 <b>{last_p} pts</b>" if last_p > 0 else ""
+        afford_icon = "🟢" if clause <= my_balance else "🔴"
+
+        sign = "+" if margin >= 0 else ""
+        rate_str = f"+{fmt_eur(rate, compact=True)}/día" if rate > 0 else f"{fmt_eur(rate, compact=True)}/día" if rate < 0 else "estable"
+
+        lines.append(
+            f"{idx}. <b>{h(name)}</b> ({h(pos)}) - <i>{h(mgr)}</i>{p_badge}\n"
+            f"   • {badge}\n"
+            f"   • 🔒 <b>Cláusula:</b> {fmt_eur(clause)} ({ratio:.2f}x valor) {afford_icon}\n"
+            f"   • 📈 <b>Tendencia:</b> {rate_str} <i>(Proy {horizon}d: {fmt_eur(proj)})</i>\n"
+            f"   • 💰 <b>Margen Est.:</b> <b>{sign}{fmt_eur(margin)}</b> ({roi:+.1f}% ROI)\n"
+        )
+
+    lines.append("<i>💡 Pulsa los botones abajo para ejecutar el clausulazo directo o consultar su scouting.</i>")
+    return "\n".join(lines)
+
+
+def clause_steals_keyboard(steals: List[Dict[str, Any]], my_balance: int = 0) -> Dict[str, Any]:
+    rows = []
+    for s in steals[:6]:
+        pid = s.get("player_id")
+        amt = s.get("buyout_clause")
+        name = s.get("name")
+        last_p = s.get("last_season_points", 0)
+        p_badge = f" | 🏆 {last_p}p" if last_p > 0 else ""
+
+        btn_row = []
+        if pid and amt:
+            afford_tag = "⚡ Robar" if amt <= my_balance else "💸 Cláusula"
+            btn_row.append({"text": f"{afford_tag} {name} ({fmt_eur(amt, compact=True)})", "callback_data": f"clause_{pid}_{amt}"})
+            btn_row.append({"text": f"🔍 Scout {name}{p_badge}", "callback_data": f"scout_{pid}_clausulas"})
+        if btn_row:
+            rows.append(btn_row)
+
+    rows.append([{"text": "🔄 Flips de Mercado Libre", "callback_data": "cmd_flip"}])
+    rows.append([{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}])
+    return {"inline_keyboard": rows}
+

@@ -4,7 +4,51 @@ All notable changes to the **fantasybot** project for rival tracking, transfer a
 
 ---
 
-## [Unreleased] - 2026-08-21
+## [Unreleased] - 2026-08-24
+
+### Added
+
+#### 1. Rival Clause Robbery & Flips Engine (`fantasybot/strategy/clause_steals.py`)
+- **`find_rival_clause_flips()` & `evaluate_rival_player()`**: Scans all rival squads in the league to identify lucrative clause buyout ("clausulazo") opportunities by cross-referencing rival buyout clauses (`buyoutClause`) against FutbolFantasy real-time trend trajectories, player points, and protection ratios.
+- **Smart Protection & ROI Metrics**:
+  - `clause_ratio`: Ratio of buyout clause vs market value (1.00x = unprotected, 2.50x+ = heavily shielded).
+  - `rate_dia`: Daily rate of market value change (€/day).
+  - `proyeccion`: Projected market valuation at $N$ days (horizon).
+  - `margin` & `margin_pct`: Estimated net profit and ROI % against the buyout clause.
+  - `steal_score`: Composite opportunity rating.
+- **Verdict Badges**: Categorizes players as `💎 GANGA FLIP` (positive projected ROI), `🚀 COHETE` (rising ≥150k/day), `🔓 DESPROTEGIDO` (low clause ratio and fast rise), `⭐ CRACK ASEQUIBLE` (high-performing star with affordable clause), and `🛡️ BLINDADO` (heavily protected).
+
+#### 2. CLI Command (`fantasybot/cli.py`)
+- **`python -m fantasybot clausulas`** (aliases: `steals`, `clause-flips`):
+  - Formatted terminal table showing Player, Position, Rival Owner, Market Value, Buyout Clause, Clause Ratio, Daily Rise, 7D Projection, ROI %, Badges, and Affordability flag (`<=`).
+  - Supports `--min-rise <euros>`, `--horizon <days>`, manager query (`"Agrobetis"`, `"#1"`), and `--json`.
+- **`python -m fantasybot clause <playerId> [amount]`**:
+  - Automatically queries the exact live `buyoutClause` from the server if `amount` is omitted.
+
+#### 3. Telegram Bot Clausulazos & Robos Menu (`fantasybot/telegram/`)
+- **Interactive Button & Command**: Added `⚡ Clausulazos & Robos` in main menu and `/clausulas` / `/robos` command.
+- **Direct Action Buttons**: Single-tap `⚡ Robar <Jugador> (<Precio>)` and `🔍 Scout <Jugador>` buttons.
+- **Affordability Indicators**: Real-time solvency badges (`🟢` within liquid balance / `🔴` exceeds liquid balance).
+
+#### 4. Universal Contextual "Back" Navigation (`fantasybot/telegram/ui.py`, `fantasybot/telegram/bot.py`)
+- **Context-Aware Scouting Return**: Scouting cards now include explicit return buttons back to the calling view (`⚡ Volver a Clausulazos & Robos`, `🛒 Volver a Mercado`, `🔄 Volver a Flips`, `📋 Volver a Mi Plantilla`).
+- **Sub-Menu Back Buttons**: Added return buttons across Rival Detail (`⚔️ Volver a Lista de Rivales`), History Detail (`📊 Volver a Histórico & P/L`), Trends (`🛒 Volver a Mercado`), and Action Results.
+
+#### 5. Windows Control Panel & Launcher (`iniciar_bot.bat`, `start.bat`)
+- Interactive batch launcher with UTF-8 encoding support, automatic Python detection, and 1-click execution for Telegram daemon, Mission Control web UI, User Stats, Agent Review, OAuth Login, and Clause Steals Scanner.
+
+#### 6. Unit Tests (`tests/test_clause_steals.py`)
+- Added unit tests covering positive ROI clause flips, falling trend safeguards, own-player exclusions, and manager/rank filtering.
+- **74/74 unit tests passing**.
+
+### Fixed & Hardened
+
+- **Live Buyout Clause Resolution & 409 Error Prevention (`fantasybot/telegram/bot.py`, `fantasybot/cli.py`)**: Resolves live `buyoutClause` and `buyoutClauseLockedEndTime` before submitting `pay_buyout_clause`, avoiding `409 Buyout wanted to pay is not updated` and displaying friendly error / balance requirement messages.
+- **Position Lookup Name Definition**: Imported `POS` in `fantasybot/telegram/bot.py` to prevent `NameError: name 'POS' is not defined`.
+
+---
+
+## [0.1.0] - 2026-08-21
 
 ### Added
 

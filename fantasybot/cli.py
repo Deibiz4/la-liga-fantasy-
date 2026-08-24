@@ -26,6 +26,7 @@ from .strategy import lineup as lineup_opt
 from .strategy import needs as needs_mod
 from .strategy import rivals as rivals_mod
 from .strategy import history as history_mod
+from .strategy import clause_steals as clause_steals_mod
 from . import agent as agent_mod
 from . import execute as execute_mod
 from . import events
@@ -331,6 +332,59 @@ def cmd_flip(args):
               f"{r['tendencia']}{flag}")
 
 
+def cmd_clausulas(args):
+    fc = FantasyClient()
+    lid, tid = fc.default_ids()
+    if getattr(args, "league", None):
+        lid = args.league
+    my_team = fc.team(lid, tid)
+    my_money = my_team.get("teamMoney", 0)
+
+    mgr_q = " ".join(args.manager).strip() if getattr(args, "manager", None) else None
+    steals = clause_steals_mod.find_rival_clause_flips(
+        fc,
+        lid,
+        horizon=args.horizon,
+        min_daily_rise=getattr(args, "min_rise", 0) or 0,
+        manager_query=mgr_q
+    )
+
+    if args.json:
+        return _print_json({
+            "league_id": lid,
+            "my_balance": my_money,
+            "horizon_days": args.horizon,
+            "total_steals_found": len(steals),
+            "opportunities": steals,
+        })
+
+    title = f"RIVAL CLAUSE FLIPS & ROBBERY SCANNER (Horizon: {args.horizon}d)"
+    if mgr_q:
+        title += f" [Manager: {mgr_q}]"
+    print(f"\n--- {title} ---")
+    print(f"Your Balance: {my_money:,} € | Candidates found: {len(steals)}\n")
+
+    if not steals:
+        print("No rival clause opportunities match your current filters.")
+        return
+
+    print(f"{'PLAYER':<18}{'POS':<5}{'RIVAL OWNER':<18}{'VALUE':>12}{'CLAUSE':>12}{'RATIO':>7}{'RISE/DAY':>13}{'PROJ 7D':>12}{'ROI':>9}  {'BADGE'}")
+    print("-" * 115)
+
+    for s in steals:
+        can_afford = " <=" if s["buyout_clause"] <= my_money else ""
+        mgr_str = s["manager_name"][:16]
+        diff_str = f"{s['margin_pct']:+.1f}%"
+        rate_str = f"{s['rate_dia']:+,}" if s["rate_dia"] != 0 else "-"
+        ratio_str = f"{s['clause_ratio']:.2f}x"
+
+        print(f"{s['name'][:17]:<18}{s['pos']:<5}{mgr_str:<18}{s['market_value']:>12,}{s['buyout_clause']:>12,}"
+              f"{ratio_str:>7}{rate_str:>13}{s['proyeccion']:>12,}{diff_str:>9}  {s['badge']}{can_afford}")
+
+    print("\nTip: Pay a buyout clause via:")
+    print("  python -m fantasybot clause <playerId> <amount>")
+
+
 def cmd_optimize(args):
     fc = FantasyClient()
     lid, tid = fc.default_ids()
@@ -541,10 +595,32 @@ def cmd_cancel_bid(args):
 
 def cmd_clause(args):
     fc = FantasyClient()
-    lid, _ = fc.default_ids()
-    resp = fc.pay_buyout_clause(lid, args.player_id, args.amount)
-    events.emit("clause", f"Buyout clause: {args.player_id} for {args.amount:,}")
-    _print_json(resp)
+    lid, tid = fc.default_ids()
+    target_amount = args.amount
+
+    if target_amount is None or target_amount <= 0:
+        teams = fc.league_teams(lid) or []
+        for t in teams:
+            for p in t.get("players", []) or []:
+                if str((p.get("playerMaster") or {}).get("id")) == str(args.player_id):
+                    target_amount = p.get("buyoutClause")
+                    break
+            if target_amount:
+                break
+
+    if not target_amount:
+        print(f"Error: Could not determine buyout clause for player {args.player_id}. Please specify amount.")
+        sys.exit(1)
+
+    try:
+        resp = fc.pay_buyout_clause(lid, args.player_id, target_amount)
+        events.emit("clause", f"Buyout clause: {args.player_id} for {target_amount:,}")
+        _print_json(resp)
+    except FantasyError as e:
+        if "030.01.49" in str(e) or "not updated" in str(e):
+            print(f"[ERROR] The buyout clause for player {args.player_id} was updated on the server. Please run 'python -m fantasybot clausulas' to see the new price.")
+            sys.exit(1)
+        raise
 
 
 def cmd_bid_now(args):
@@ -729,6 +805,15 @@ def build_parser():
     fp.add_argument("--json", action="store_true", help="JSON output")
     fp.set_defaults(func=cmd_flip)
 
+    for c_alias in ("clausulas", "steals", "clause-flips"):
+        cp = sub.add_parser(c_alias, help="rival buyout clause flips & robbery scanner")
+        cp.add_argument("manager", nargs="*", help="filter by rival manager name, rank (#1, 1), or ID")
+        cp.add_argument("--horizon", type=int, default=flip.DEFAULT_HORIZON, help="projection horizon in days (default: 7)")
+        cp.add_argument("--min-rise", type=int, default=0, help="filter by minimum daily market value rise in euros")
+        cp.add_argument("--league", help="override league ID")
+        cp.add_argument("--json", action="store_true", help="JSON output")
+        cp.set_defaults(func=cmd_clausulas)
+
     rv = sub.add_parser("rivals", help="rival budgets, cash flow & clause investments")
     rv.add_argument("manager", nargs="*", help="manager name, rank (#1, 1), or ID to inspect squad & clauses")
     rv.add_argument("--initial-budget", type=int, default=None,
@@ -795,9 +880,9 @@ def build_parser():
     cb.add_argument("bid_id")
     cb.set_defaults(func=cmd_cancel_bid)
 
-    cl = sub.add_parser("clause", help="pay a player's buyout clause (playerId amount)")
+    cl = sub.add_parser("clause", help="pay a player's buyout clause (playerId [amount])")
     cl.add_argument("player_id")
-    cl.add_argument("amount", type=int)
+    cl.add_argument("amount", type=int, nargs="?", default=None, help="buyout clause amount (optional, defaults to exact live clause)")
     cl.set_defaults(func=cmd_clause)
 
     sn = sub.add_parser("bid-now", help="one-off last-minute bid (marketId max)")
