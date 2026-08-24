@@ -40,7 +40,8 @@ def set_user_display_name(chat_id: int, name: str):
 
 
 def _ensure_dir():
-    os.makedirs(TELEGRAM_SESSIONS_DIR, exist_ok=True)
+    os.makedirs(TELEGRAM_SESSIONS_DIR, mode=0o700, exist_ok=True)
+    config.secure_path(TELEGRAM_SESSIONS_DIR, 0o700)
 
 
 def _user_token_path(chat_id: int) -> str:
@@ -65,6 +66,9 @@ def save_user_tokens(chat_id: int, tokens: Dict[str, Any]):
     try:
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(tokens, f, indent=2)
+        # Restrict before the rename so the credentials are never briefly
+        # readable by other accounts on the host.
+        config.secure_path(tmp_path)
         os.replace(tmp_path, path)
     except Exception:
         if os.path.exists(tmp_path):
@@ -101,7 +105,9 @@ def _load_registry() -> Dict[str, Any]:
 
 
 def _save_registry(data: Dict[str, Any]):
-    os.makedirs(os.path.dirname(REGISTRY_PATH), exist_ok=True)
+    state_dir = os.path.dirname(REGISTRY_PATH)
+    os.makedirs(state_dir, mode=0o700, exist_ok=True)
+    config.secure_path(state_dir, 0o700)
     tmp_path = f"{REGISTRY_PATH}.tmp"
     try:
         with open(tmp_path, "w", encoding="utf-8") as f:

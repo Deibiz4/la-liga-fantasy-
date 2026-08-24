@@ -74,7 +74,9 @@ def _read(path, default):
 
 
 def _write(path, value):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    directory = os.path.dirname(path)
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    config.secure_path(directory, 0o700)
     tmp_path = f"{path}.tmp"
     try:
         with open(tmp_path, "w", encoding="utf-8") as f:

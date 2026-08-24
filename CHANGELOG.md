@@ -152,7 +152,7 @@ All notable changes to the **fantasybot** project for rival tracking, transfer a
 
 #### 9. Admin Usage Analytics & User Registry (`fantasybot/telegram/sessions.py`)
 - **Permanent User Registry (`.state/telegram_registry.json`)**: Tracks unique Telegram users, `@username`, first name, interaction counts, and last active timestamps.
-- **Admin Access Control**: `/stats` (or `/usuarios` / `/admin_stats`) and `/reportes` restricted exclusively to authorized bot administrator (`TELEGRAM_ADMIN_CHAT_ID` / developer ID `351138675`).
+- **Admin Access Control**: `/stats` (or `/usuarios` / `/admin_stats`) and `/reportes` restricted exclusively to the authorized bot administrator (`TELEGRAM_ADMIN_CHAT_ID`).
 - **CLI Analytics**: `python -m fantasybot stats` for terminal-based user adoption statistics.
 
 #### 10. LLM Agent Integration (`fantasybot/agent.py`)

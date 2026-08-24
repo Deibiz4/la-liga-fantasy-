@@ -1278,13 +1278,13 @@ class TelegramBot:
                 logger.error("Failed to forward report to admin: %s", e)
 
     def _is_admin(self, chat_id: int) -> bool:
+        """Admin access comes only from TELEGRAM_ADMIN_CHAT_ID.
+
+        Never hardcode the operator's chat ID here: this repository is public,
+        and a literal turns into a standing announcement of who runs the bot.
+        """
         admin_id = os.environ.get("TELEGRAM_ADMIN_CHAT_ID")
-        if admin_id and str(chat_id) == str(admin_id).strip():
-            return True
-        # Developer / creator chat ID
-        if str(chat_id) == "351138675":
-            return True
-        return False
+        return bool(admin_id) and str(chat_id) == str(admin_id).strip()
 
     def cmd_admin_feedback(self, chat_id: int):
         if not self._is_admin(chat_id):

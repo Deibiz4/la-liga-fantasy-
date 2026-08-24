@@ -59,6 +59,7 @@ def load_tokens() -> dict:
 def save_tokens(tokens: dict):
     with open(config.TOKENS_PATH, "w", encoding="utf-8") as f:
         json.dump(tokens, f, indent=2)
+    config.secure_path(config.TOKENS_PATH)
 
 
 def bearer_token(tokens: dict) -> str:

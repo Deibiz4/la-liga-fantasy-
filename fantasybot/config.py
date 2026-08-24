@@ -41,6 +41,19 @@ PKCE_PATH = os.path.join(ROOT, ".pkce.json")
 # Margin for refreshing the token before it expires (seconds).
 TOKEN_EXPIRY_MARGIN = 120
 
+def secure_path(path, mode=0o600):
+    """Restricts a file or directory to its owner.
+
+    The token stores hold OAuth credentials -- including, for the Telegram bot,
+    those of other users -- so they must never be created world-readable by the
+    default umask. Silently ignored where the platform has no POSIX modes.
+    """
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        pass
+
+
 def _load_env():
     env_path = os.path.join(ROOT, ".env")
     if os.path.isfile(env_path):
