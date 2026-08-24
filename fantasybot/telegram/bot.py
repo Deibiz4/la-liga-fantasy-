@@ -8,10 +8,12 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Optional
 
 from .. import auth
@@ -57,6 +59,9 @@ class TelegramBot:
                 return None
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="ignore")
+            # Don't log spammy benign Telegram errors
+            if "message is not modified" in err_body or "query is too old" in err_body:
+                return None
             logger.error("Telegram API Error %d %s: %s", e.code, e.reason, err_body)
             return None
         except Exception as e:
@@ -128,8 +133,6 @@ class TelegramBot:
         if reply_markup:
             payload["reply_markup"] = reply_markup
         res = self._api_call("editMessageText", payload)
-        if not res:
-            return self.send_message(chat_id, text, reply_markup=reply_markup, parse_mode=parse_mode)
         return res
 
     def answer_callback_query(self, callback_query_id: str, text: Optional[str] = None):
@@ -250,7 +253,8 @@ class TelegramBot:
         cb_id = cb.get("id")
 
         if cb_id:
-            self.answer_callback_query(cb_id)
+            # Answer callback query immediately to clear the Telegram button spinner
+            threading.Thread(target=self.answer_callback_query, args=(cb_id,), daemon=True).start()
 
         if not chat_id:
             return
@@ -1300,7 +1304,11 @@ class TelegramBot:
         text = ui.format_admin_stats(stats)
         self.send_message(chat_id, text, reply_markup=ui.back_to_menu_keyboard())
 
-    # --- Polling Loop ---
+    def _safe_handle_update(self, update: Dict[str, Any]):
+        try:
+            self.handle_update(update)
+        except Exception as e:
+            logger.error("Error handling update: %s", e, exc_info=True)
 
     def start_polling(self):
         self.running = True
@@ -1310,25 +1318,26 @@ class TelegramBot:
         # Start background alerts and autopilot worker
         from . import notifications
         notifications.start_notification_worker(self)
-        
-        while self.running:
-            try:
-                updates = self._api_call("getUpdates", {
-                    "offset": self.offset,
-                    "timeout": 25,
-                })
-                if updates:
-                    for upd in updates:
-                        upd_id = upd.get("update_id", 0)
-                        if upd_id >= self.offset:
-                            self.offset = upd_id + 1
-                        self.handle_update(upd)
-            except KeyboardInterrupt:
-                print("\n[Telegram Bot] Stopping polling daemon...")
-                break
-            except Exception as e:
-                logger.error("Polling error: %s", e)
-                time.sleep(2)
+
+        with ThreadPoolExecutor(max_workers=16) as executor:
+            while self.running:
+                try:
+                    updates = self._api_call("getUpdates", {
+                        "offset": self.offset,
+                        "timeout": 20,
+                    })
+                    if updates:
+                        for upd in updates:
+                            upd_id = upd.get("update_id", 0)
+                            if upd_id >= self.offset:
+                                self.offset = upd_id + 1
+                            executor.submit(self._safe_handle_update, upd)
+                except KeyboardInterrupt:
+                    print("\n[Telegram Bot] Stopping polling daemon...")
+                    break
+                except Exception as e:
+                    logger.error("Polling error: %s", e)
+                    time.sleep(1)
 
 
 def run_bot(token: str):
