@@ -1309,15 +1309,32 @@ class TelegramBot:
         self.send_message(chat_id, text, reply_markup=ui.back_to_menu_keyboard())
 
     def _safe_handle_update(self, update: Dict[str, Any]):
+        t0 = time.time()
         try:
-            self.handle_update(update)
+            upd_id = update.get("update_id")
+            if "message" in update:
+                msg = update["message"]
+                chat_id = msg.get("chat", {}).get("id")
+                text = msg.get("text", "")
+                print(f"[Telegram] 📩 Message from {chat_id}: '{text}'", flush=True)
+                self.handle_message(msg)
+            elif "callback_query" in update:
+                cb = update["callback_query"]
+                chat_id = cb.get("message", {}).get("chat", {}).get("id")
+                data = cb.get("data", "")
+                print(f"[Telegram] 🔘 Callback from {chat_id}: '{data}'", flush=True)
+                self.handle_callback_query(cb)
+            print(f"[Telegram] ⏱️ Update {upd_id} finished in {time.time() - t0:.2f}s", flush=True)
         except Exception as e:
+            print(f"[Telegram] ❌ Error handling update: {e}", flush=True)
             logger.error("Error handling update: %s", e, exc_info=True)
 
     def start_polling(self):
+        import socket
+        socket.setdefaulttimeout(15)
         self.running = True
-        print("[Telegram Bot] Polling daemon started successfully.")
-        print("[Telegram Bot] Open https://t.me/LaLigaFantasyTelegramBot in Telegram!")
+        print("[Telegram Bot] Polling daemon started successfully.", flush=True)
+        print("[Telegram Bot] Open https://t.me/LaLigaFantasyTelegramBot in Telegram!", flush=True)
 
         # Start background alerts and autopilot worker
         from . import notifications
@@ -1328,7 +1345,7 @@ class TelegramBot:
                 try:
                     updates = self._api_call("getUpdates", {
                         "offset": self.offset,
-                        "timeout": 20,
+                        "timeout": 10,
                     })
                     if updates:
                         for upd in updates:
@@ -1337,7 +1354,7 @@ class TelegramBot:
                                 self.offset = upd_id + 1
                             executor.submit(self._safe_handle_update, upd)
                 except KeyboardInterrupt:
-                    print("\n[Telegram Bot] Stopping polling daemon...")
+                    print("\n[Telegram Bot] Stopping polling daemon...", flush=True)
                     break
                 except Exception as e:
                     logger.error("Polling error: %s", e)
