@@ -50,21 +50,22 @@ def resolve_player_names(
             needed_pids.add(str(pid))
 
     if needed_pids:
-        for pid in needed_pids:
-            try:
-                r = client.get(f"/v1/competition/1/player/{pid}?x-lang=es")
-                name = r.get("nickname") or r.get("name")
-                if name:
-                    cache[pid] = {
-                        "name": name,
-                        "pos": POS.get(r.get("positionId"), "?"),
-                        "market_value": r.get("marketValue") or 0,
-                    }
-            except Exception:
-                # Do not persist placeholders permanently to disk so future runs can retry
-                pass
-        state.save_players_cache(cache)
+        try:
+            all_p = client.all_players() or []
+            for p in all_p:
+                pid_str = str(p.get("id"))
+                if pid_str in needed_pids:
+                    name = p.get("nickname") or p.get("name")
+                    if name:
+                        cache[pid_str] = {
+                            "name": name,
+                            "pos": POS.get(p.get("positionId"), "?"),
+                            "market_value": p.get("marketValue") or 0,
+                        }
+        except Exception:
+            pass
 
+    state.save_players_cache(cache)
     return cache
 
 
@@ -219,8 +220,11 @@ def analyze_league_trading_history(
     league_id: str
 ) -> Dict[str, Any]:
     """Computes trading history for all managers across the entire league."""
-    teams = client.league_teams(league_id) or []
-    activity_live = client.league_activity(league_id) or []
+    existing_history = state.load_activity_history(league_id)
+    if existing_history:
+        activity_live = client.league_activity(league_id, fetch_all=False) or []
+    else:
+        activity_live = client.league_activity(league_id, fetch_all=True) or []
     activity_cumulative = state.record_activity(activity_live, league_id)
 
     player_names = resolve_player_names(client, activity_cumulative, teams)
