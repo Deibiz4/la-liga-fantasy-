@@ -59,8 +59,9 @@ class TelegramBot:
                 return None
         except urllib.error.HTTPError as e:
             err_body = e.read().decode("utf-8", errors="ignore")
-            # Don't log spammy benign Telegram errors
-            if "message is not modified" in err_body or "query is too old" in err_body:
+            if "message is not modified" in err_body:
+                return {"ok": True, "result": True, "unmodified": True}
+            if "query is too old" in err_body:
                 return None
             logger.error("Telegram API Error %d %s: %s", e.code, e.reason, err_body)
             return None
@@ -133,6 +134,9 @@ class TelegramBot:
         if reply_markup:
             payload["reply_markup"] = reply_markup
         res = self._api_call("editMessageText", payload)
+        if res is None:
+            # If editing failed (e.g. message too old, format change), fallback to sending new message
+            return self.send_message(chat_id, text, reply_markup=reply_markup, parse_mode=parse_mode)
         return res
 
     def answer_callback_query(self, callback_query_id: str, text: Optional[str] = None):
