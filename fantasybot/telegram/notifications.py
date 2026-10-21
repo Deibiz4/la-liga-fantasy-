@@ -31,6 +31,7 @@ _LAST_PROCESSED_WEEK: Dict[int, int] = {}
 _LAST_SEEN_PLAYER_STATUS: Dict[int, Dict[str, Dict[str, Any]]] = {}
 _LAST_SEEN_PLAYER_POINTS: Dict[int, Dict[str, int]] = {}
 _LAST_SEEN_GW_REMINDER: Dict[int, str] = {}
+_LAST_AUTO_LINEUP_TIME: Dict[int, float] = {}
 
 
 def start_notification_worker(bot_instance):
@@ -187,6 +188,7 @@ def _check_player_injuries_and_expulsions(bot, chat_id: int, team_data: Dict[str
 
         # 1. Transition to Injured
         if cur_type == "injured" and prev_type != "injured" and notify_inj:
+            _LAST_AUTO_LINEUP_TIME.pop(chat_id, None)
             bot.send_message(
                 chat_id,
                 f"🚑 <b>¡Alerta de Lesión en tu Plantilla!</b>\n\n"
@@ -207,6 +209,7 @@ def _check_player_injuries_and_expulsions(bot, chat_id: int, team_data: Dict[str
 
         # 3. Transition to Suspended / Expelled
         elif cur_type == "suspended" and prev_type != "suspended" and notify_exp:
+            _LAST_AUTO_LINEUP_TIME.pop(chat_id, None)
             bot.send_message(
                 chat_id,
                 f"🟥 <b>¡Alerta de Sanción / Expulsión!</b>\n\n"
@@ -447,7 +450,40 @@ def _check_gameweek_reminder(bot, chat_id: int, client, lid: Any, tid: Any, team
 
 
 def _check_auto_lineup(bot, chat_id: int, client, lid: Any, tid: Any, team_data: Dict[str, Any]):
-    """Optimizes and automatically submits the best XI if auto-lineup is enabled."""
+    """Optimizes and automatically submits the best XI if auto-lineup is enabled.
+
+    Does NOT run every 5 minutes:
+      - Normal days (>24h to kickoff): checks at most once every 12 hours.
+      - Match day (<=24h to kickoff): checks every 2 hours.
+      - Final countdown (<=3h to kickoff): checks every 30 minutes for last-minute news.
+    """
+    now_ts = time.time()
+    last_check = _LAST_AUTO_LINEUP_TIME.get(chat_id, 0)
+
+    # Adaptive interval based on proximity to matchday kickoff
+    check_interval = 12 * 3600  # Default: 12 hours
+    try:
+        from ..sources import matchday
+        from datetime import datetime, timezone
+        gw_kickoff_iso = matchday.next_gameweek_kickoff()
+        if gw_kickoff_iso:
+            iso_clean = gw_kickoff_iso.replace("Z", "+00:00")
+            kickoff_dt = datetime.fromisoformat(iso_clean)
+            if kickoff_dt.tzinfo is None:
+                kickoff_dt = kickoff_dt.replace(tzinfo=timezone.utc)
+            seconds_left = (kickoff_dt - datetime.now(timezone.utc)).total_seconds()
+            if 0 < seconds_left <= 3 * 3600:
+                check_interval = 30 * 60   # Final 3 hours: every 30 min
+            elif 0 < seconds_left <= 24 * 3600:
+                check_interval = 2 * 3600   # Match day: every 2 hours
+    except Exception:
+        pass
+
+    if (now_ts - last_check) < check_interval:
+        return
+
+    _LAST_AUTO_LINEUP_TIME[chat_id] = now_ts
+
     try:
         best = lineup_opt.optimize(team_data)
         current_ids = agent_mod._current_xi_ids(client, tid)
