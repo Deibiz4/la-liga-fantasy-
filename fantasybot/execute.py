@@ -35,7 +35,7 @@ def _system_flips(client, league_id):
             if o["via"] == "SISTEMA" and o["margin_pct"] > 0]
 
 
-def plan_bids(client, league_id, team, ops=None):
+def plan_bids(client, league_id, team, ops=None, chat_id=None):
     """What to bid on: profitable SYSTEM flips that fit the balance, by margin.
 
     SYSTEM only (auction). Buyouts are outside the scope of autonomy.
@@ -43,7 +43,7 @@ def plan_bids(client, league_id, team, ops=None):
     money = team["teamMoney"]
     if ops is None:
         ops = _system_flips(client, league_id)
-    already = state.load_bids()
+    already = state.load_bids(chat_id)
     plan, committed = [], 0
     for o in ops:
         if o["market_id"] in already:
@@ -58,11 +58,11 @@ def plan_bids(client, league_id, team, ops=None):
     return plan
 
 
-def sync_bids(client, league_id, team, dry_run=True):
+def sync_bids(client, league_id, team, dry_run=True, chat_id=None):
     """Places new bids from the plan and cancels those that no longer apply."""
     ops = _system_flips(client, league_id)   # a single pass, reused below
-    plan = plan_bids(client, league_id, team, ops)
-    bids = state.load_bids()
+    plan = plan_bids(client, league_id, team, ops, chat_id=chat_id)
+    bids = state.load_bids(chat_id)
     valid_ids = {o["market_id"] for o in ops}
 
     placed, cancelled = [], []
@@ -99,14 +99,14 @@ def sync_bids(client, league_id, team, dry_run=True):
             placed.append(b)
 
     if not dry_run:
-        state.save_bids(bids)
+        state.save_bids(bids, chat_id)
     return {"action": "bids", "placed": placed, "cancelled": cancelled,
             "applied": not dry_run}
 
 
-def act(client, league_id, team_id, team, best, current_ids, dry_run=True):
+def act(client, league_id, team_id, team, best, current_ids, dry_run=True, chat_id=None):
     """Executes (or plans) the autonomous actions: set lineup + bid."""
     return {
         "lineup": apply_lineup(client, team_id, best, current_ids, dry_run),
-        "bids": sync_bids(client, league_id, team, dry_run),
+        "bids": sync_bids(client, league_id, team, dry_run, chat_id=chat_id),
     }

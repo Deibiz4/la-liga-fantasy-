@@ -194,6 +194,8 @@ def get_user_settings(chat_id: int) -> Dict[str, bool]:
         "notify_gameweek_6h": settings.get("notify_gameweek_6h", True),
         "notify_lineup": settings.get("notify_lineup", True),
         "auto_lineup": settings.get("auto_lineup", False),
+        "auto_bids": settings.get("auto_bids", False),
+        "auto_sells": settings.get("auto_sells", False),
     }
 
 
@@ -212,6 +214,17 @@ def toggle_user_setting(chat_id: int, key: str) -> Dict[str, bool]:
     ))
     cur_val = settings.get(key, default_on)
     settings[key] = not cur_val
+    tokens["settings"] = settings
+    save_user_tokens(chat_id, tokens)
+    return get_user_settings(chat_id)
+
+
+def set_full_autopilot(chat_id: int, enabled: bool = True) -> Dict[str, bool]:
+    tokens = load_user_tokens(chat_id) or {}
+    settings = tokens.get("settings", {})
+    settings["auto_lineup"] = enabled
+    settings["auto_bids"] = enabled
+    settings["auto_sells"] = enabled
     tokens["settings"] = settings
     save_user_tokens(chat_id, tokens)
     return get_user_settings(chat_id)

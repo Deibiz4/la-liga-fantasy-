@@ -35,13 +35,15 @@ def save_players_cache(cache: dict):
     _write(PLAYERS_CACHE_PATH, cache)
 
 
-def load_bids() -> dict:
+def load_bids(chat_id: int | None = None) -> dict:
     """Bids placed by the agent: {market_id: {bid_id, amount, nombre}}."""
-    return _read(BIDS_PATH, {})
+    path = os.path.join(STATE_DIR, f"bids_{chat_id}.json") if chat_id else BIDS_PATH
+    return _read(path, {})
 
 
-def save_bids(bids: dict):
-    _write(BIDS_PATH, bids)
+def save_bids(bids: dict, chat_id: int | None = None):
+    path = os.path.join(STATE_DIR, f"bids_{chat_id}.json") if chat_id else BIDS_PATH
+    _write(path, bids)
 
 
 # --- last-minute bid plan (targets a cron job will close out at market close) ---

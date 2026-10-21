@@ -171,8 +171,17 @@ def settings_keyboard(settings: Dict[str, bool]) -> Dict[str, Any]:
     gw_txt = "ACTIVADO ⏳" if settings.get("notify_gameweek_6h", True) else "DESACTIVADO 🔕"
     l_txt = "ACTIVADO ⏰" if settings.get("notify_lineup", True) else "DESACTIVADO 🔕"
     a_txt = "ACTIVADO 🤖" if settings.get("auto_lineup", False) else "DESACTIVADO ⏸"
+    b_txt = "ACTIVADO 💰" if settings.get("auto_bids", False) else "DESACTIVADO ⏸"
+    s_txt = "ACTIVADO 🏷" if settings.get("auto_sells", False) else "DESACTIVADO ⏸"
+    all_auto = settings.get("auto_lineup", False) and settings.get("auto_bids", False) and settings.get("auto_sells", False)
+    all_txt = "DESACTIVAR TODO ⏸" if all_auto else "ACTIVAR TODO (100% AUTÓNOMO) 🚀"
+
     return {
         "inline_keyboard": [
+            [{"text": f"🚀 MODO AUTOPILOT: {all_txt}", "callback_data": "action_toggle_full_autopilot"}],
+            [{"text": f"⚽ Auto-Alinear Óptimo: {a_txt}", "callback_data": "toggle_auto_lineup"}],
+            [{"text": f"💰 Auto-Comprar (Flips): {b_txt}", "callback_data": "toggle_auto_bids"}],
+            [{"text": f"🏷 Auto-Vender (Descartes): {s_txt}", "callback_data": "toggle_auto_sells"}],
             [{"text": f"🛒 Mercado Diario Renovado: {m_txt}", "callback_data": "toggle_notify_market_reset"}],
             [{"text": f"🚑 Alerta de Lesiones: {inj_txt}", "callback_data": "toggle_notify_injuries"}],
             [{"text": f"🟥 Alerta de Sanciones / Expulsión: {exp_txt}", "callback_data": "toggle_notify_expulsions"}],
@@ -180,7 +189,6 @@ def settings_keyboard(settings: Dict[str, bool]) -> Dict[str, Any]:
             [{"text": f"⏳ Alerta 6h Inicio Jornada: {gw_txt}", "callback_data": "toggle_notify_gameweek_6h"}],
             [{"text": f"🔔 Chollos de Reventa (Flips): {f_txt}", "callback_data": "toggle_notify_flips"}],
             [{"text": f"⏰ Recordatorio de Alineación: {l_txt}", "callback_data": "toggle_notify_lineup"}],
-            [{"text": f"🤖 Auto-Alinear Automático: {a_txt}", "callback_data": "toggle_auto_lineup"}],
             [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]
         ]
     }
