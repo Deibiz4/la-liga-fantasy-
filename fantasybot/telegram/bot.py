@@ -1332,6 +1332,10 @@ class TelegramBot:
                 data = cb.get("data", "")
                 print(f"[Telegram] 🔘 Callback from {chat_id}: '{data}'", flush=True)
                 self.handle_callback_query(cb)
+            elif "pre_checkout_query" in update:
+                self.handle_pre_checkout_query(update["pre_checkout_query"])
+            elif "edited_message" in update:
+                self.handle_message(update["edited_message"])
             print(f"[Telegram] ⏱️ Update {upd_id} finished in {time.time() - t0:.2f}s", flush=True)
         except Exception as e:
             print(f"[Telegram] ❌ Error handling update: {e}", flush=True)
@@ -1342,7 +1346,7 @@ class TelegramBot:
         from .. import net as net_mod
 
         net_mod.prefer_ipv4()
-        socket.setdefaulttimeout(15)
+        socket.setdefaulttimeout(35)
         self.running = True
         print("[Telegram Bot] Polling daemon started successfully.", flush=True)
         print("[Telegram Bot] Open https://t.me/LaLigaFantasyTelegramBot in Telegram!", flush=True)
@@ -1356,11 +1360,24 @@ class TelegramBot:
                 try:
                     updates = self._api_call(
                         "getUpdates",
-                        {"offset": self.offset, "timeout": 10},
+                        {
+                            "offset": self.offset,
+                            "timeout": 10,
+                            "allowed_updates": [
+                                "message",
+                                "edited_message",
+                                "callback_query",
+                                "pre_checkout_query",
+                            ],
+                        },
                         # Must outlast the 10s server-side long poll.
                         timeout=25,
                         retries=0,
                     )
+                    if updates is None:
+                        # Backoff briefly on network or API errors to avoid tight error loops
+                        time.sleep(2)
+                        continue
                     if updates:
                         for upd in updates:
                             upd_id = upd.get("update_id", 0)

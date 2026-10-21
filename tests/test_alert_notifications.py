@@ -53,7 +53,8 @@ class TestAlertNotifications(unittest.TestCase):
         self.assertTrue(any("Alerta de Sanciones" in t for t in btn_texts))
         self.assertTrue(any("Puntos de Jugadores" in t for t in btn_texts))
 
-    def test_injury_and_expulsion_alerts(self):
+    @unittest.mock.patch("fantasybot.sources.lineups.probable_lineups", return_value={})
+    def test_injury_and_expulsion_alerts(self, mock_lineups):
         # Initial squad state (all healthy)
         team_data_v1 = {
             "players": [
