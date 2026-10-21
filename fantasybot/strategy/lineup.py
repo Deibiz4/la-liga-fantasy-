@@ -133,16 +133,18 @@ def _fill(need, by_pos, gk, pool):
     # (LaLiga may drop it, but an emergency XI beats an empty payload)
     bench = [e for e in pool if e["playerTeamId"] not in used]
     bi = 0
+    cross_pos = 0
     for pos, n in need.items():
         while len(picks[pos]) < n and bi < len(bench):
             e = bench[bi]
             bi += 1
             picks[pos].append(e)
             used.add(e["playerTeamId"])
+            cross_pos += 1
     if any(len(picks[pos]) < n for pos, n in need.items()):
         return None  # not even 11 players in the squad
     unavailable = sum(1 for pos in picks for e in picks[pos] if not e["disponible"])
-    return picks, unavailable
+    return picks, unavailable, cross_pos
 
 
 def optimize(team, prob_index=None):
@@ -193,7 +195,7 @@ def optimize(team, prob_index=None):
         filled = _fill(need, by_pos, gk, pool)
         if filled is None:
             continue  # can't field 11 in this shape
-        picks, unavailable = filled
+        picks, unavailable, cross_pos = filled
         total = gk["score"] + sum(e["score"] for pos in picks for e in picks[pos])
         cand = {
             "formation": (d, m, f),
@@ -202,8 +204,12 @@ def optimize(team, prob_index=None):
             "midfield": picks["midfield"],
             "striker": picks["striker"],
             "total": round(total, 1),
-            # rank: fewest injured fielded, then prefer a clean shape, then score
-            "_rank": (-unavailable, 1 if full_available else 0, round(total, 1)),
+            # rank:
+            # 1. Strict priority: NO out-of-position players (LaLiga rejects/drops them)
+            # 2. Fewest injured/unavailable players fielded
+            # 3. Formations with 100% available starters
+            # 4. Total points potential
+            "_rank": (-cross_pos, -unavailable, 1 if full_available else 0, round(total, 1)),
         }
         if best is None or cand["_rank"] > best["_rank"]:
             best = cand

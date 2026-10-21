@@ -133,6 +133,21 @@ class TestLineupNeverEmptyNeverUnavailable(unittest.TestCase):
         self.assertEqual(len(payload_ids(best)), 11)
         self.assertEqual(payload_ids(best), _available_ids(best))
 
+    def test_squad_with_only_three_defenders_never_picks_four_defenders(self):
+        """Squad with exactly 3 defenders (one injured), 4 midfielders, 6 strikers.
+        It must pick (3, 4, 3) with all 3 defenders, and NEVER (4, 3, 3) which would
+        force a non-defender into defense.
+        """
+        players = [_player("gk1", 1, 5_000_000), _player("gk2", 1, 1_000_000)]
+        players += [_player("d1", 2, 8_000_000), _player("d2", 2, 8_000_000), _player("d3", 2, 8_000_000, status="injured")]
+        players += [_player(f"m{i}", 3, 8_000_000) for i in range(1, 5)]  # 4 MIDs
+        players += [_player(f"s{i}", 4, 15_000_000) for i in range(1, 7)] # 6 FWDs
+        best = optimize({"players": players}, prob_index={})
+        self.assertEqual(best["formation"], (3, 4, 3))
+        self.assertEqual(set(best["payload"]["defender"]), {"d1", "d2", "d3"})
+        self.assertEqual(len(best["payload"]["midfield"]), 4)
+        self.assertEqual(len(best["payload"]["striker"]), 3)
+
 
 if __name__ == "__main__":
     unittest.main()
