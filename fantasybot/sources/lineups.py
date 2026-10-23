@@ -25,15 +25,25 @@ def team_slugs():
 
 
 def team_lineup(slug: str):
-    """Team players with starting probability and status."""
+    """Team players with starting probability and status.
+
+    The list view (`div.tipo_lista`, keyed by `data-nombre`) carries the probability
+    and status of EVERY player. The pitch shirts (`a.camiseta`) are only a fallback:
+    the drawn starting XI omits `data-probabilidad`, so reading only the shirts left
+    every sure starter with prob=None (scored as bench).
+    """
     html = net.get(config.FF_TEAM_URL.format(slug=slug))
-    best = {}
+    tags = []
+    for tag in re.findall(r'<div class="jugador_\d+ jugador tipo_lista[^>]*>', html):
+        tags.append((_attr(tag, "data-nombre"), tag))
     for tag in re.findall(r'<a class="camiseta[^>]*>', html):
-        href = _attr(tag, "href") or ""
-        m = re.search(r"/jugadores/([a-z0-9-]+)", href)
-        if not m:
+        m = re.search(r"/jugadores/([a-z0-9-]+)", _attr(tag, "href") or "")
+        tags.append((m.group(1) if m else None, tag))
+
+    best = {}
+    for player_slug, tag in tags:
+        if not player_slug:
             continue
-        player_slug = m.group(1)
         prob = (_attr(tag, "data-probabilidad") or "").rstrip("%")
         lesion = _attr(tag, "data-lesion")
         sancionado = _attr(tag, "data-sancionado") == "1"
