@@ -151,3 +151,30 @@ class TestLineupNeverEmptyNeverUnavailable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FutbolfantasyKnock(unittest.TestCase):
+    """futbolfantasy's data-lesion is a code: flagged but still likely to start (Camello:
+    lesion=2, 80%) is a doubt, not an injury. Only a flag with no chance to play is out."""
+
+    def test_flag_with_probability_is_doubt_not_out(self):
+        from fantasybot.strategy.lineup import player_score
+        p = _player("c", 4, 50_000_000, name="camello")
+        idx = {"camello": {"prob": 80, "lesionado": False, "duda": True, "disponible": True}}
+        score, _, disponible, tag = player_score(p, idx)
+        self.assertTrue(disponible)
+        self.assertEqual(tag, "doubtful")
+        self.assertAlmostEqual(score, 48, delta=1)
+
+    def test_parser_splits_injured_from_doubt(self):
+        from unittest import mock
+        from fantasybot.sources import lineups
+        html = ('<div class="jugador_1 jugador tipo_lista" data-nombre="a" '
+                'data-probabilidad="80%" data-lesion="2">'
+                '<div class="jugador_2 jugador tipo_lista" data-nombre="b" '
+                'data-probabilidad="0%" data-lesion="1">'
+                '<div class="jugador_3 jugador tipo_lista" data-nombre="c" '
+                'data-probabilidad="90%" data-lesion="-1">')
+        with mock.patch.object(lineups.net, "get", return_value=html):
+            got = {p["slug"]: (p["lesionado"], p["duda"]) for p in lineups.team_lineup("x")}
+        self.assertEqual(got, {"a": (False, True), "b": (True, False), "c": (False, False)})

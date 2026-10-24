@@ -48,11 +48,17 @@ def team_lineup(slug: str):
         lesion = _attr(tag, "data-lesion")
         sancionado = _attr(tag, "data-sancionado") == "1"
         nodisponible = _attr(tag, "data-nodisponible") == "1"
+        prob = int(prob) if prob.isdigit() else None
+        # data-lesion is a code, not a yes/no (Camello: lesion=2 yet 80% to start). The
+        # probability already prices the knock in: flagged with a chance to play = doubt,
+        # flagged with none = injured.
+        flagged = lesion not in (None, "-1", "0")
         p = {
             "slug": player_slug,
             "nombre": player_slug.replace("-", " "),
-            "prob": int(prob) if prob.isdigit() else None,
-            "lesionado": lesion not in (None, "-1", "0"),
+            "prob": prob,
+            "lesionado": flagged and not prob,
+            "duda": flagged and bool(prob),
             "sancionado": sancionado,
             "disponible": not (sancionado or nodisponible),
             "equipo": slug,

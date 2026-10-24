@@ -72,6 +72,8 @@ def player_score(player, prob_index):
     # futbolfantasy is a second injury source; it only ever makes things worse (out).
     if info and (info.get("lesionado") or not info.get("disponible", True)):
         disponible, doubtful = False, False
+    elif info and info.get("duda") and disponible:
+        doubtful = True   # futbolfantasy knock, but still a real chance to start
 
     if not disponible:
         base, tag = 0.0, "out"
