@@ -46,6 +46,16 @@ def save_bids(bids: dict, chat_id: int | None = None):
     _write(path, bids)
 
 
+def load_flips(chat_id: int | None = None) -> dict:
+    """Players bought as flips, held to resell:
+    {player_id: {nombre, buy_price, bought_at, target_pct}}."""
+    return _read(os.path.join(STATE_DIR, f"flips_{chat_id or 'default'}.json"), {})
+
+
+def save_flips(flips: dict, chat_id: int | None = None):
+    _write(os.path.join(STATE_DIR, f"flips_{chat_id or 'default'}.json"), flips)
+
+
 # --- last-minute bid plan (targets a cron job will close out at market close) ---
 def load_bid_plan() -> list:
     """Bid targets for market close: [{market_id, max_bid}]."""

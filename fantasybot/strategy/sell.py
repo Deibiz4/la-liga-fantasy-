@@ -10,6 +10,8 @@ It does NOT touch a cheap backup whose value is rising or stable (an appreciatin
 asset or useful rotation).
 """
 
+import time
+
 from ..matching import match_name, POS
 from .lineup import payload_ids
 
@@ -55,4 +57,43 @@ def sell_candidates(team, best, trends_index, falling_threshold=FALLING_THRESHOL
             "priority": prio,
         })
     out.sort(key=lambda c: (c["priority"], -c["valor"]))
+    return out
+
+
+FLIP_MAX_HOLD_DAYS = 7  # = flip.DEFAULT_HORIZON: the projection the buy was based on
+
+
+def flip_exits(team, best, flips, now=None):
+    """Flips to close: bought to resell, so sell once the target margin is reached, or
+    after FLIP_MAX_HOLD_DAYS if it never got there (the projection failed; dead money
+    and a wasted squad slot). A flip that made it into the optimal XI is kept for now.
+    """
+    now = time.time() if now is None else now
+    xi_ids = payload_ids(best) if best else set()
+    out = []
+    for p in team["players"]:
+        pm = p["playerMaster"]
+        f = flips.get(str(pm.get("id")))
+        if not f or (p.get("playerTeamId") or pm["id"]) in xi_ids:
+            continue
+        valor = pm.get("marketValue") or 0
+        buy = f.get("buy_price") or 0
+        gain_pct = round((valor / buy - 1) * 100, 1) if buy else 0.0
+        held_days = (now - (f.get("bought_at") or now)) / 86400
+        if gain_pct >= f.get("target_pct", 0):
+            reason = f"flip closed: target reached ({gain_pct:+.1f}%)"
+        elif held_days >= FLIP_MAX_HOLD_DAYS:
+            reason = f"flip expired: {int(held_days)} days, {gain_pct:+.1f}%"
+        else:
+            continue
+        out.append({
+            "nombre": pm.get("nickname") or pm.get("name"),
+            "player_id": pm.get("id"),
+            "pos": POS.get(pm.get("positionId"), "?"),
+            "valor": valor,
+            "sale_price": round(valor),
+            "tendencia": None,
+            "reason": reason,
+            "priority": 0,
+        })
     return out

@@ -1035,7 +1035,7 @@ class TelegramBot:
         try:
             lid, tid = client.default_ids()
             team = client.team(lid, tid)
-            res = execute_mod.sync_bids(client, lid, team, dry_run=False)
+            res = execute_mod.sync_bids(client, lid, team, dry_run=False, chat_id=chat_id)
             placed = res.get("placed", [])
             cancelled = res.get("cancelled", [])
             lines = ["🤖 <b>Resultado de Auto-Pujas:</b>\n"]
@@ -1103,9 +1103,6 @@ class TelegramBot:
         if not client:
             return
         try:
-            from ..strategy import sell as sell_mod
-            from ..sources.market_trends import trends_index
-
             lid, tid = client.default_ids()
             team = client.team(lid, tid)
             best = lineup_opt.optimize(team)
@@ -1133,41 +1130,11 @@ class TelegramBot:
                 for c in bd["cancelled"]:
                     lines.append(f"  • {c}")
 
-            # 3. Auto-Sells: List non-XI falling players and accept incoming offers
-            trends_idx = trends_index()
-            candidates = sell_mod.sell_candidates(team, best, trends_idx)
-            market = client.market(lid) or []
-            my_market_items = [m for m in market if str(m.get("team", {}).get("id")) == str(tid)]
-            already_on_market_pids = {str(m.get("playerMaster", {}).get("id")) for m in my_market_items}
-
-            listed_players = []
-            for cand in candidates:
-                pid = str(cand["player_id"])
-                if pid not in already_on_market_pids:
-                    try:
-                        price = cand["sale_price"]
-                        client.sell_player(lid, pid, price)
-                        listed_players.append(cand)
-                        already_on_market_pids.add(pid)
-                    except Exception as e:
-                        logger.debug("Failed to list player %s in autopilot: %s", pid, e)
-
-            accepted_offers = []
-            for item in my_market_items:
-                mid = item.get("id")
-                pm = item.get("playerMaster") or {}
-                p_name = pm.get("nickname") or pm.get("name") or "Jugador"
-                val = pm.get("marketValue") or item.get("salePrice") or 0
-                bids = item.get("bids") or item.get("offers") or []
-                for b in bids:
-                    bid_id = b.get("id")
-                    money = b.get("money") or b.get("amount") or b.get("offerMoney")
-                    if money and bid_id and money >= (val * 0.95):
-                        try:
-                            client.accept_offer(lid, mid, bid_id, money)
-                            accepted_offers.append({"nombre": p_name, "money": money})
-                        except Exception as e:
-                            logger.debug("Failed to accept offer on %s: %s", mid, e)
+            # 3. Auto-Sells: close flips, list non-XI sells, accept the best offer at value
+            sl = execute_mod.sync_sells(client, lid, tid, team, best,
+                                        dry_run=False, chat_id=chat_id)
+            listed_players = sl["listed"]
+            accepted_offers = sl["accepted"]
 
             if listed_players:
                 lines.append("\n🏷 <b>Ventas Listadas en el Mercado:</b>")

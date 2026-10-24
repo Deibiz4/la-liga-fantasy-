@@ -522,57 +522,16 @@ def _check_auto_bids(bot, chat_id: int, client, lid: Any, tid: Any, team_data: D
 
 
 def _check_auto_sells(bot, chat_id: int, client, lid: Any, tid: Any, team_data: Dict[str, Any]):
-    """Automatically lists falling non-XI players on the market and accepts profitable offers."""
+    """Closes flips, lists non-XI players worth selling and accepts the best offer at value."""
     try:
-        from ..strategy import sell as sell_mod
-        from ..sources.market_trends import trends_index
         from ..strategy import lineup as lineup_opt
 
-        # 1. Determine optimal XI so we NEVER sell protected starters
+        # optimal XI first, so we NEVER sell protected starters
         best = lineup_opt.optimize(team_data)
-        trends_idx = trends_index()
-        candidates = sell_mod.sell_candidates(team_data, best, trends_idx)
-
-        # 2. Check which players of ours are already on the market
-        market = client.market(lid) or []
-        my_market_items = [m for m in market if str(m.get("team", {}).get("id")) == str(tid)]
-        already_on_market_pids = {
-            str(m.get("playerMaster", {}).get("id"))
-            for m in my_market_items
-        }
-
-        listed_players = []
-        for cand in candidates:
-            pid = str(cand["player_id"])
-            if pid not in already_on_market_pids:
-                try:
-                    price = cand["sale_price"]
-                    client.sell_player(lid, pid, price)
-                    listed_players.append(cand)
-                    already_on_market_pids.add(pid)
-                except Exception as e:
-                    logger.debug("Failed to list player %s for sale: %s", pid, e)
-
-        # 3. Check for incoming offers on our market items to accept
-        accepted_offers = []
-        for item in my_market_items:
-            mid = item.get("id")
-            pm = item.get("playerMaster") or {}
-            p_name = pm.get("nickname") or pm.get("name") or "Jugador"
-            val = pm.get("marketValue") or item.get("salePrice") or 0
-            bids = item.get("bids") or item.get("offers") or []
-            for b in bids:
-                bid_id = b.get("id")
-                money = b.get("money") or b.get("amount") or b.get("offerMoney")
-                # Accept if offer is >= 95% of current value, or if value is falling
-                if money and bid_id:
-                    should_accept = money >= (val * 0.95)
-                    if should_accept:
-                        try:
-                            client.accept_offer(lid, mid, bid_id, money)
-                            accepted_offers.append({"nombre": p_name, "money": money})
-                        except Exception as e:
-                            logger.debug("Failed to accept offer on %s: %s", mid, e)
+        res = execute_mod.sync_sells(client, lid, tid, team_data, best,
+                                     dry_run=False, chat_id=chat_id)
+        listed_players = res["listed"]
+        accepted_offers = res["accepted"]
 
         if listed_players or accepted_offers:
             lines = ["🤖 <b>Auto-Ventas de Mercado Ejecutadas:</b>\n"]
