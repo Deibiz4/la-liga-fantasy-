@@ -90,6 +90,7 @@ def evaluate(element, index, horizon):
         "margin": round(margin),
         "margin_pct": round(margin / buy_price * 100, 1) if buy_price else 0,
         "last_season_points": int(pm.get("lastSeasonPoints") or 0),
+        "points": int(pm.get("points") or 0),
         "rate_dia": round(daily_rate(trend)),
         "tendencia": trend.get("tendencia"),
         "has_my_bid": bool(element.get("bid") or element.get("bids")),

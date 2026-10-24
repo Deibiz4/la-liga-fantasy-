@@ -29,10 +29,23 @@ def apply_lineup(client, team_id, best, current_ids, dry_run=True):
             "formation": best["formation"]}
 
 
+# Same bar as the flip alerts: a +0.6% "margin" on a 0.5M benchwarmer is trend noise,
+# not a flip, and it burns a squad slot on a player who never scores.
+MIN_FLIP_MARGIN_PCT = 3.0
+MIN_FLIP_MARGIN = 200_000
+
+
 def _system_flips(client, league_id):
-    """Profitable SYSTEM flips (a single pass over market + trends)."""
+    """Profitable SYSTEM flips (a single pass over market + trends).
+
+    Only real flips: margin over the alert thresholds and a player who has actually
+    scored this season (0 points = hasn't played all year).
+    """
     return [o for o in flip.opportunities(client, league_id)
-            if o["via"] == "SISTEMA" and o["margin_pct"] > 0]
+            if o["via"] == "SISTEMA"
+            and o["margin_pct"] >= MIN_FLIP_MARGIN_PCT
+            and o["margin"] >= MIN_FLIP_MARGIN
+            and o["points"] > 0]
 
 
 def plan_bids(client, league_id, team, ops=None, chat_id=None):
