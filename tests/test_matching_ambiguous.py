@@ -28,3 +28,34 @@ class TestAmbiguousMatch(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TeamTieBreak(unittest.TestCase):
+    """An ambiguous nickname ('Ramon': ramon enriquez / pablo ramon) resolves by team."""
+
+    IDX = {"ramon enriquez": {"prob": 20, "equipo": "malaga"},
+           "pablo ramon": {"prob": 70, "equipo": "racing"},
+           "inaki williams": {"prob": 90, "equipo": "athletic"},
+           "takefusa kubo": {"prob": 90, "equipo": "real-sociedad"},
+           "kylian mbappe": {"prob": 95, "equipo": "real-madrid"}}
+
+    def test_team_breaks_ambiguity(self):
+        from fantasybot.matching import match_name
+        self.assertIsNone(match_name("Ramon", "", self.IDX))
+        self.assertEqual(match_name("Ramon", "", self.IDX, team="malaga")["prob"], 20)
+        self.assertEqual(match_name("Ramon", "", self.IDX, team="racing")["prob"], 70)
+        self.assertIsNone(match_name("Ramon", "", self.IDX, team="betis"))
+
+    def test_ff_team_from_laliga_slug(self):
+        from fantasybot.matching import ff_team
+        self.assertEqual(ff_team("athletic-club", self.IDX), "athletic")
+        self.assertEqual(ff_team("real-sociedad", self.IDX), "real-sociedad")
+        self.assertEqual(ff_team("real-madrid", self.IDX), "real-madrid")
+        self.assertIsNone(ff_team("fc-barcelona", self.IDX))
+        self.assertIsNone(ff_team(None, self.IDX))
+
+    def test_team_map_by_majority(self):
+        from fantasybot.matching import ff_team_map
+        players = [{"nickname": "Kylian Mbappé", "teamId": "15"},
+                   {"nickname": "Takefusa Kubo", "teamId": "16"}]
+        self.assertEqual(ff_team_map(players, self.IDX), {"15": "real-madrid", "16": "real-sociedad"})

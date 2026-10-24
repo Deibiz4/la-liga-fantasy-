@@ -6,7 +6,7 @@ and their availability (injury/suspension, from the API and from futbolfantasy).
 body ready for `FantasyClient.update_lineup`. It does NOT apply anything by itself.
 """
 
-from ..matching import match_name
+from ..matching import ff_team, match_name
 from ..sources.lineups import probable_lineups
 
 POS = {1: "goalkeeper", 2: "defender", 3: "midfield", 4: "striker"}
@@ -78,7 +78,8 @@ def player_score(player, prob_index):
       - 'out'       : injured/suspended/unavailable → won't play, scores 0.
     """
     pm = player["playerMaster"]
-    info = match_name(pm.get("nickname", ""), pm.get("name", ""), prob_index)
+    info = match_name(pm.get("nickname", ""), pm.get("name", ""), prob_index,
+                      team=ff_team((pm.get("team") or {}).get("slug"), prob_index))
     prob = info.get("prob") if info else None
 
     status = (pm.get("playerStatus") or "ok").lower()

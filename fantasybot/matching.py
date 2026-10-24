@@ -23,11 +23,12 @@ def index_by_name(items, key="nombre"):
     return {normalize(it[key]): it for it in items}
 
 
-def match_name(nickname: str, full_name: str, index: dict):
+def match_name(nickname: str, full_name: str, index: dict, team: str | None = None):
     """Finds the `index` entry for a player from the LaLiga API.
 
     Tries an exact match by nickname and by full name; if that fails, by tokens
-    (all the significant tokens of the nickname appear in the key).
+    (all the significant tokens of the nickname appear in the key). `team` (the
+    futbolfantasy team slug, see `ff_team`) breaks ties between several hits.
     Returns the entry or None.
     """
     nick = normalize(nickname)
@@ -44,6 +45,32 @@ def match_name(nickname: str, full_name: str, index: dict):
         # Ambiguous -> no confident match. The ID crosswalk is the real fix.
         hits = [value for key, value in index.items()
                 if all(t in key for t in tokens)]
+        if len(hits) > 1 and team:
+            hits = [h for h in hits if h.get("equipo") == team]
         if len(hits) == 1:
             return hits[0]
     return None
+
+
+def ff_team(laliga_slug: str | None, index: dict) -> str | None:
+    """futbolfantasy team slug for a LaLiga team slug: the futbolfantasy slug is
+    contained in LaLiga's ('athletic' in 'athletic-club', 'real-madrid' in 'real-madrid',
+    'racing' in 'r-racing-club'). Longest wins, so 'real-sociedad' never reads as 'real'."""
+    if not laliga_slug:
+        return None
+    teams = {e.get("equipo") for e in index.values() if e.get("equipo")}
+    found = [t for t in teams if t in laliga_slug]
+    return max(found, key=len) if found else None
+
+
+def ff_team_map(players, index: dict) -> dict:
+    """{LaLiga teamId: futbolfantasy slug} for lists that carry only `teamId` (the
+    `/players` master list): each team takes the slug most of its exactly-matched
+    players belong to."""
+    from collections import Counter, defaultdict
+    votes = defaultdict(Counter)
+    for p in players:
+        e = index.get(normalize(p.get("nickname", "")))
+        if e and e.get("equipo") and p.get("teamId") is not None:
+            votes[str(p["teamId"])][e["equipo"]] += 1
+    return {t: v.most_common(1)[0][0] for t, v in votes.items()}

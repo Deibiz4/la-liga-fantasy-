@@ -5,7 +5,7 @@ per million of market value, so cheap regulars who score surface above expensive
 names. Flags who is on your league's market right now and who is already yours.
 """
 
-from ..matching import match_name
+from ..matching import ff_team_map, match_name
 
 MIN_POINTS = 20   # below this a high ratio is one lucky match, not a bargain
 TOP_N = 10
@@ -21,6 +21,7 @@ def bargains(players, position_id, prob_index=None, on_market=(), owned=(),
     """
     prob_index = prob_index or {}
     on_market, owned = {str(i) for i in on_market}, {str(i) for i in owned}
+    teams = ff_team_map(players, prob_index)   # /players has teamId only, no slug
     out = []
     for p in players:
         if str(p.get("positionId")) != str(position_id):
@@ -31,7 +32,8 @@ def bargains(players, position_id, prob_index=None, on_market=(), owned=(),
         points = int(p.get("points") or 0)
         if value <= 0 or points < min_points:
             continue
-        info = match_name(p.get("nickname", ""), p.get("nickname", ""), prob_index)
+        info = match_name(p.get("nickname", ""), p.get("nickname", ""), prob_index,
+                          team=teams.get(str(p.get("teamId"))))
         pid = str(p.get("id"))
         out.append({
             "player_id": pid,

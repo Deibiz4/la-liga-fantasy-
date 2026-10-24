@@ -20,7 +20,7 @@ from ..strategy import flip as flip_mod
 from ..strategy import lineup as lineup_opt
 from .. import agent as agent_mod
 from .. import execute as execute_mod
-from ..matching import match_name
+from ..matching import ff_team, match_name
 
 logger = logging.getLogger("fantasybot.notifications")
 
@@ -140,7 +140,9 @@ def _check_player_injuries_and_expulsions(bot, chat_id: int, team_data: Dict[str
         pos_str = ui.POS.get(pos_id, "?")
 
         raw_status = (pm.get("playerStatus") or "ok").lower()
-        info = match_name(name, pm.get("name", ""), prob_index) if prob_index else None
+        info = match_name(name, pm.get("name", ""), prob_index,
+                          team=ff_team((pm.get("team") or {}).get("slug"), prob_index)
+                          ) if prob_index else None
 
         # Determine normalized status type
         is_suspended = (
