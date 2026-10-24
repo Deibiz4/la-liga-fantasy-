@@ -1,8 +1,8 @@
 """Lineup optimizer.
 
-Picks the best XI and the best formation among several valid ones, based on the
-probability of each player starting (futbolfantasy) and their availability
-(injury/suspension, from the API and from futbolfantasy). Returns the proposal and the
+Picks the best XI and the best formation among several valid ones, based on each
+player's expected points: probability of starting (futbolfantasy) × points per match,
+and their availability (injury/suspension, from the API and from futbolfantasy). Returns the proposal and the
 body ready for `FantasyClient.update_lineup`. It does NOT apply anything by itself.
 """
 
@@ -44,6 +44,21 @@ def caliber_prior(market_value):
 
 NOT_IN_XI_SCORE = 5.0  # on his team but futbolfantasy doesn't list him as a starter → ~0%
 DOUBTFUL_DISCOUNT = 0.6  # a 'duda' usually plays: rank below a fit player, ABOVE an injured one
+# Points per match assumed for a player with no average yet (hasn't played this season):
+# roughly a modest regular, so a 90% starter without a track record isn't scored as 0.
+DEFAULT_AVG_POINTS = 2.0
+MIN_AVG_POINTS = 0.5     # a negative/zero average must not zero out (or invert) the chance
+
+
+def expected_points(pm, start_pct):
+    """Expected points for the matchday: chance of starting × points per match.
+
+    Ranking by start probability alone benched a 60-point striker for a 43-point one
+    who was likelier to start; what we want on the pitch is points.
+    """
+    avg = pm.get("averagePoints")
+    avg = DEFAULT_AVG_POINTS if not pm.get("points") or avg is None else max(avg, MIN_AVG_POINTS)
+    return start_pct / 100 * avg
 
 # LaLiga playerStatus values that mean "probably plays, but with risk". Everything else
 # that isn't "ok" is treated as won't-play (score 0) — conservative for unknown statuses.
@@ -69,11 +84,12 @@ def player_score(player, prob_index):
     status = (pm.get("playerStatus") or "ok").lower()
     doubtful = status in _DOUBTFUL_STATUS
     disponible = status == "ok" or doubtful   # a doubtful player is still fieldable & may score
+    ff_knock = False
     # futbolfantasy is a second injury source; it only ever makes things worse (out).
     if info and (info.get("lesionado") or not info.get("disponible", True)):
         disponible, doubtful = False, False
-    elif info and info.get("duda") and disponible:
-        doubtful = True   # futbolfantasy knock, but still a real chance to start
+    elif info and info.get("duda") and disponible and not doubtful:
+        ff_knock = True   # futbolfantasy knock, but still a real chance to start
 
     if not disponible:
         base, tag = 0.0, "out"
@@ -86,8 +102,11 @@ def player_score(player, prob_index):
     if doubtful:
         base *= DOUBTFUL_DISCOUNT   # risk: below a fit player of the same prob, above injured (0)
         tag = "doubtful"
-    base += (pm.get("lastSeasonPoints") or 0) * 0.001  # tiebreaker
-    return base, prob, disponible, tag
+    elif ff_knock:
+        tag = "doubtful"   # no extra discount: futbolfantasy's prob already prices the knock in
+    score = expected_points(pm, base)
+    score += (pm.get("lastSeasonPoints") or 0) * 0.0001  # tiebreaker
+    return score, prob, disponible, tag
 
 
 def _pid(player):

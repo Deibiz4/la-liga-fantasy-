@@ -35,6 +35,7 @@ def main_menu_keyboard(logged_in: bool = True) -> Dict[str, Any]:
                 {"text": "🔄 Flips de Mercado", "callback_data": "cmd_flip"},
                 {"text": "⚡ Clausulazos & Robos", "callback_data": "cmd_clausulas"},
             ],
+            [{"text": "💎 Chollos por Posición", "callback_data": "cmd_chollos"}],
             [
                 {"text": "⚽ Alineación Óptima", "callback_data": "cmd_lineup"},
                 {"text": "🚀 Autopilot Completo", "callback_data": "cmd_autopilot"},
@@ -668,6 +669,38 @@ def format_trends(trends_list: List[Dict[str, Any]]) -> str:
     for p in down:
         lines.append(f"• <b>{h(p.get('nombre', 'Jugador'))}</b> ({h(p.get('equipo', ''))}): <b>{fmt_eur(p.get('tendencia', 0))}/día 📉</b>")
 
+    return "\n".join(lines)
+
+
+_POS_NAMES = {1: "Porteros", 2: "Defensas", 3: "Centrocampistas", 4: "Delanteros"}
+
+
+def chollos_keyboard(active: Optional[int] = None) -> Dict[str, Any]:
+    labels = {1: "🧤 POR", 2: "🛡 DEF", 3: "🎯 MED", 4: "⚽ DEL"}
+    row = [{"text": ("• " if pos == active else "") + label, "callback_data": f"chollos_{pos}"}
+           for pos, label in labels.items()]
+    return {"inline_keyboard": [row, [{"text": "🔙 Menú Principal", "callback_data": "cmd_menu"}]]}
+
+
+def format_chollos(rows: List[Dict[str, Any]], position_id: Optional[int] = None,
+                   min_points: int = 20) -> str:
+    if position_id is None:
+        return ("💎 <b>Chollos por Posición</b>\n\n"
+                "Los jugadores que más puntos dan por cada millón que valen.\n"
+                "Elige una posición:")
+    lines = [f"💎 <b>Chollos · {_POS_NAMES[position_id]}</b>",
+             f"<i>Puntos por millón · mínimo {min_points} pts · 🛒 en tu mercado · ⭐ tuyo</i>\n"]
+    if not rows:
+        lines.append("No hay jugadores que cumplan el filtro todavía.")
+    for i, b in enumerate(rows, 1):
+        flags = ("⭐" if b["owned"] else "") + ("🛒" if b["on_market"] else "")
+        prob = f" · 🎯 {b['prob']}%" if b.get("prob") is not None else ""
+        duda = " · ⚠️ duda" if b.get("doubtful") else ""
+        lines.append(
+            f"{i}. {flags}{' ' if flags else ''}<b>{h(b['nombre'])}</b> — "
+            f"<b>{str(b['ppm']).replace('.', ',')} pts/M</b>\n"
+            f"    {b['points']} pts (media {str(b['avg']).replace('.', ',')}) · "
+            f"{fmt_eur(b['valor'], compact=True)}{prob}{duda}")
     return "\n".join(lines)
 
 

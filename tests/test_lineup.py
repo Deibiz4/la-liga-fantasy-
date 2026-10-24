@@ -160,11 +160,13 @@ class FutbolfantasyKnock(unittest.TestCase):
     def test_flag_with_probability_is_doubt_not_out(self):
         from fantasybot.strategy.lineup import player_score
         p = _player("c", 4, 50_000_000, name="camello")
+        p["playerMaster"].update(points=60, averagePoints=6.0)
         idx = {"camello": {"prob": 80, "lesionado": False, "duda": True, "disponible": True}}
         score, _, disponible, tag = player_score(p, idx)
         self.assertTrue(disponible)
         self.assertEqual(tag, "doubtful")
-        self.assertAlmostEqual(score, 48, delta=1)
+        # no extra discount: the 80% already prices the knock in → 0.8 × 6
+        self.assertAlmostEqual(score, 4.8, delta=0.05)
 
     def test_parser_splits_injured_from_doubt(self):
         from unittest import mock
@@ -178,3 +180,23 @@ class FutbolfantasyKnock(unittest.TestCase):
         with mock.patch.object(lineups.net, "get", return_value=html):
             got = {p["slug"]: (p["lesionado"], p["duda"]) for p in lineups.team_lineup("x")}
         self.assertEqual(got, {"a": (False, True), "b": (True, False), "c": (False, False)})
+
+
+class ExpectedPoints(unittest.TestCase):
+    """The XI is ranked by expected points (start % × points per match), not start % alone:
+    the reported case benched a 60-point striker (80%, knock) for a 43-point one at 60%."""
+
+    def test_better_scorer_beats_likelier_starter(self):
+        from fantasybot.strategy.lineup import player_score
+        star = _player("s", 4, 50_000_000, name="star")
+        star["playerMaster"].update(points=60, averagePoints=6.0)
+        safe = _player("j", 4, 13_000_000, name="safe")
+        safe["playerMaster"].update(points=43, averagePoints=4.3)
+        idx = {"star": {"prob": 80, "duda": True, "disponible": True},
+               "safe": {"prob": 60, "disponible": True}}
+        self.assertGreater(player_score(star, idx)[0], player_score(safe, idx)[0])
+
+    def test_no_track_record_is_not_zero(self):
+        from fantasybot.strategy.lineup import player_score
+        new = _player("n", 3, 5_000_000, name="new")   # 0 points so far
+        self.assertGreater(player_score(new, {"new": {"prob": 90, "disponible": True}})[0], 1)

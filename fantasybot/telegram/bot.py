@@ -219,6 +219,10 @@ class TelegramBot:
             self.cmd_trends(chat_id)
         elif text.startswith("/flip"):
             self.cmd_flip(chat_id)
+        elif text.startswith("/chollos") or text.startswith("/bargains"):
+            parts = text.split(maxsplit=1)
+            pos = {"por": 1, "def": 2, "med": 3, "del": 4}.get(parts[1][:3].lower()) if len(parts) > 1 else None
+            self.cmd_chollos(chat_id, pos)
         elif text.startswith("/leagues") or text.startswith("/ligas"):
             self.cmd_leagues(chat_id)
         elif text.startswith("/lineup"):
@@ -299,6 +303,10 @@ class TelegramBot:
             self.cmd_trends(chat_id, message_id=message_id)
         elif data == "cmd_flip":
             self.cmd_flip(chat_id, message_id=message_id)
+        elif data == "cmd_chollos":
+            self.cmd_chollos(chat_id, message_id=message_id)
+        elif data.startswith("chollos_"):
+            self.cmd_chollos(chat_id, int(data.split("_")[1]), message_id=message_id)
         elif data == "cmd_clausulas" or data == "cmd_steals":
             self.cmd_clause_steals(chat_id, message_id=message_id)
         elif data == "cmd_lineup":
@@ -402,6 +410,7 @@ class TelegramBot:
             "• /scout <jugador> - Informe histórico, titularidad y evolución\n"
             "• /trends - Jugadores que más suben y bajan en LaLiga\n"
             "• /flip - Oportunidades de reventa y pujas en mercado libre\n"
+            "• /chollos [por|def|med|del] - Top jugadores por puntos por millón\n"
             "• /clausulas [rival] - Detectar robos, flips de cláusula y chollos rivales\n\n"
             "🚀 <b>Autopilot y Ajustes:</b>\n"
             "• /autopilot - Ejecutar alineación óptima y auto-pujas\n"
@@ -704,6 +713,35 @@ class TelegramBot:
                 self.send_message(chat_id, text, reply_markup=markup)
         except Exception as e:
             self.send_message(chat_id, f"❌ Error al cargar mercado: {e}")
+
+    def cmd_chollos(self, chat_id: int, position_id: Optional[int] = None, message_id: Optional[int] = None):
+        rows = []
+        if position_id is not None:
+            client = self._get_client_or_ask_login(chat_id)
+            if not client:
+                return
+            try:
+                from ..strategy import bargains as bargains_mod
+                from ..sources.lineups import probable_lineups
+
+                lid, tid = client.default_ids()
+                market = client.market(lid) or []
+                team = client.team(lid, tid)
+                rows = bargains_mod.bargains(
+                    client.all_players() or [], position_id,
+                    prob_index=probable_lineups() or {},
+                    on_market={(m.get("playerMaster") or {}).get("id") for m in market},
+                    owned={p["playerMaster"].get("id") for p in team.get("players", [])},
+                )
+            except Exception as e:
+                self.send_message(chat_id, f"❌ Error al cargar chollos: {e}")
+                return
+        text = ui.format_chollos(rows, position_id)
+        markup = ui.chollos_keyboard(position_id)
+        if message_id:
+            self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
+        else:
+            self.send_message(chat_id, text, reply_markup=markup)
 
     def cmd_trends(self, chat_id: int, message_id: Optional[int] = None):
         try:
