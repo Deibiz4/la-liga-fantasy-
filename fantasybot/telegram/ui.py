@@ -793,6 +793,17 @@ def format_clause_steals(steals: List[Dict[str, Any]], my_balance: int = 0, hori
         last_p = s.get("last_season_points", 0)
         p_badge = f" | 🏆 <b>{last_p} pts</b>" if last_p > 0 else ""
         afford_icon = "🟢" if clause <= my_balance else "🔴"
+        unlock = s.get("locked_until")
+        lock_str = f"   • 🔒 <b>Bloqueada hasta</b> {_local_time(unlock)}\n" if unlock else ""
+        prob = s.get("prob")
+        if s.get("injured"):
+            play_str = "🚑 Lesionado / no disponible"
+        elif prob is not None:
+            play_str = f"🎯 Titular {prob}%" if s.get("plays") else f"🪑 Suplente probable ({prob}%)"
+        elif s.get("plays"):
+            play_str = "❔ Sin datos de alineación"
+        else:
+            play_str = "🪑 Fuera del XI probable"
 
         sign = "+" if margin >= 0 else ""
         rate_str = f"+{fmt_eur(rate, compact=True)}/día" if rate > 0 else f"{fmt_eur(rate, compact=True)}/día" if rate < 0 else "estable"
@@ -801,12 +812,38 @@ def format_clause_steals(steals: List[Dict[str, Any]], my_balance: int = 0, hori
             f"{idx}. <b>{h(name)}</b> ({h(pos)}) - <i>{h(mgr)}</i>{p_badge}\n"
             f"   • {badge}\n"
             f"   • 🔒 <b>Cláusula:</b> {fmt_eur(clause)} ({ratio:.2f}x valor) {afford_icon}\n"
+            f"{lock_str}"
+            f"   • {play_str}\n"
             f"   • 📈 <b>Tendencia:</b> {rate_str} <i>(Proy {horizon}d: {fmt_eur(proj)})</i>\n"
             f"   • 💰 <b>Margen Est.:</b> <b>{sign}{fmt_eur(margin)}</b> ({roi:+.1f}% ROI)\n"
         )
 
-    lines.append("<i>💡 Pulsa los botones abajo para ejecutar el clausulazo directo o consultar su scouting.</i>")
+    lines.append("<i>💡 Pulsa un botón para robar (te pedirá confirmación) o ver su scouting. "
+                 "Las cláusulas bloqueadas van al final.</i>")
     return "\n".join(lines)
+
+
+def _local_time(dt) -> str:
+    """dd/mm HH:MM in Spanish time."""
+    from ..sources.matchday import SPAIN_TZ
+    return dt.astimezone(SPAIN_TZ).strftime("%d/%m %H:%M")
+
+
+def clause_confirm_text(name: str, pos: str, owner: str, clause: int, my_money: int) -> str:
+    return (
+        f"⚠️ <b>Confirmar clausulazo</b>\n\n"
+        f"Vas a pagar <b>{fmt_eur(clause)}</b> por <b>{h(name)}</b> ({h(pos)}) "
+        f"a <i>{h(owner)}</i>.\n"
+        f"💵 Saldo tras el pago: <b>{fmt_eur(my_money - clause)}</b>\n\n"
+        f"<i>Es irreversible. Si la cláusula sube antes de confirmar, no se pagará.</i>"
+    )
+
+
+def clause_confirm_keyboard(player_id: str, clause: int) -> Dict[str, Any]:
+    return {"inline_keyboard": [
+        [{"text": "✅ Sí, pagar cláusula", "callback_data": f"clauseok_{player_id}_{clause}"}],
+        [{"text": "❌ Cancelar", "callback_data": "cmd_clausulas"}],
+    ]}
 
 
 def clause_steals_keyboard(steals: List[Dict[str, Any]], my_balance: int = 0) -> Dict[str, Any]:
@@ -820,8 +857,9 @@ def clause_steals_keyboard(steals: List[Dict[str, Any]], my_balance: int = 0) ->
 
         btn_row = []
         if pid and amt:
-            afford_tag = "⚡ Robar" if amt <= my_balance else "💸 Cláusula"
-            btn_row.append({"text": f"{afford_tag} {name} ({fmt_eur(amt, compact=True)})", "callback_data": f"clause_{pid}_{amt}"})
+            if not s.get("locked_until"):   # a locked clause can't be paid: scouting only
+                afford_tag = "⚡ Robar" if amt <= my_balance else "💸 Cláusula"
+                btn_row.append({"text": f"{afford_tag} {name} ({fmt_eur(amt, compact=True)})", "callback_data": f"clause_{pid}_{amt}"})
             btn_row.append({"text": f"🔍 Scout {name}{p_badge}", "callback_data": f"scout_{pid}_clausulas"})
         if btn_row:
             rows.append(btn_row)

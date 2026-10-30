@@ -169,5 +169,48 @@ class TestClauseSteals(unittest.TestCase):
             self.assertEqual(flips_rank2[0]["manager_name"], "Dani Betis")
 
 
+class TestClauseLockAndStart(unittest.TestCase):
+    MGR = {"manager_id": 1, "manager_name": "Rival", "position": 3}
+
+    def _player(self, pid, nick, lock=None, status="ok"):
+        return {"buyoutClause": 5_000_000, "buyoutClauseLockedEndTime": lock,
+                "playerMaster": {"id": pid, "nickname": nick, "name": nick, "positionId": 3,
+                                 "marketValue": 4_000_000, "teamId": "7", "playerStatus": status}}
+
+    def test_locked_clause_flagged_and_past_lock_ignored(self):
+        res = evaluate_rival_player(self._player("1", "Uno", lock="2999-01-01T10:00:00+02:00"),
+                                    self.MGR, {})
+        self.assertIsNotNone(res["locked_until"])
+        res = evaluate_rival_player(self._player("1", "Uno", lock="2020-01-01T10:00:00+02:00"),
+                                    self.MGR, {})
+        self.assertIsNone(res["locked_until"])
+
+    def test_benchwarmer_and_injured_do_not_play(self):
+        probs = {"suplente": {"nombre": "suplente", "equipo": "x", "prob": 10},
+                 "titular": {"nombre": "titular", "equipo": "x", "prob": 90}}
+        bench = evaluate_rival_player(self._player("1", "Suplente"), self.MGR, {}, prob_index=probs)
+        starter = evaluate_rival_player(self._player("2", "Titular"), self.MGR, {}, prob_index=probs)
+        hurt = evaluate_rival_player(self._player("3", "Otro", status="injured"), self.MGR, {})
+        self.assertFalse(bench["plays"])
+        self.assertTrue(starter["plays"])
+        self.assertEqual(starter["prob"], 90)
+        self.assertTrue(hurt["injured"])
+        self.assertFalse(hurt["plays"])
+
+    def test_ranking_payable_starters_first(self):
+        probs = {"suplente": {"nombre": "suplente", "equipo": "x", "prob": 10},
+                 "titular": {"nombre": "titular", "equipo": "x", "prob": 90},
+                 "cerrado": {"nombre": "cerrado", "equipo": "x", "prob": 95}}
+        client = MagicMock()
+        client.league_teams.return_value = [{"manager": {"managerName": "Rival"}, "players": [
+            self._player("1", "Suplente"),
+            self._player("2", "Cerrado", lock="2999-01-01T10:00:00+02:00"),
+            self._player("3", "Titular"),
+        ]}]
+        with patch("fantasybot.strategy.clause_steals.trends_index", return_value={}):
+            names = [s["name"] for s in find_rival_clause_flips(client, "l", prob_index=probs)]
+        self.assertEqual(names, ["Titular", "Suplente", "Cerrado"])
+
+
 if __name__ == "__main__":
     unittest.main()

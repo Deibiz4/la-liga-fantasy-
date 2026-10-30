@@ -328,7 +328,11 @@ class TelegramBot:
         elif data.startswith("clause_"):
             parts = data.split("_")
             pid, amt = parts[1], int(parts[2])
-            self.cmd_pay_clause(chat_id, pid, amt, message_id=message_id)
+            self.cmd_pay_clause(chat_id, pid, amt, message_id=message_id)   # asks to confirm
+        elif data.startswith("clauseok_"):
+            parts = data.split("_")
+            pid, amt = parts[1], int(parts[2])
+            self.cmd_pay_clause(chat_id, pid, amt, message_id=message_id, confirmed=True)
         elif data == "cmd_sell_menu":
             self.cmd_sell_menu(chat_id, message_id=message_id)
         elif data.startswith("sell_"):
@@ -857,7 +861,9 @@ class TelegramBot:
             lid, tid = client.default_ids()
             team_data = client.team(lid, tid)
             my_money = team_data.get("teamMoney", 0)
-            steals = clause_steals_mod.find_rival_clause_flips(client, lid, manager_query=query)
+            from ..sources.lineups import probable_lineups
+            steals = clause_steals_mod.find_rival_clause_flips(
+                client, lid, manager_query=query, prob_index=probable_lineups() or {})
             text = ui.format_clause_steals(steals, my_balance=my_money)
             markup = ui.clause_steals_keyboard(steals, my_balance=my_money)
             if message_id:
@@ -975,7 +981,10 @@ class TelegramBot:
         except Exception as e:
             self.send_message(chat_id, f"❌ Error al realizar puja: {e}", reply_markup=ui.back_to_menu_keyboard())
 
-    def cmd_pay_clause(self, chat_id: int, player_id: str, amount: int, message_id: Optional[int] = None):
+    def cmd_pay_clause(self, chat_id: int, player_id: str, amount: int, message_id: Optional[int] = None,
+                       confirmed: bool = False):
+        """Buyout of a rival's player. First call shows a confirmation with the live
+        clause; only `confirmed` pays, and never more than the amount confirmed."""
         client = self._get_client_or_ask_login(chat_id)
         if not client:
             return
@@ -989,6 +998,8 @@ class TelegramBot:
             target_player = None
             target_owner = "Rival"
             for t in teams:
+                if t.get("teamMoney") is not None:
+                    continue   # own squad: already ours (e.g. a repeated tap after paying)
                 for p in t.get("players", []) or []:
                     pm = p.get("playerMaster") or {}
                     if str(pm.get("id")) == str(player_id):
@@ -1041,6 +1052,22 @@ class TelegramBot:
                     f"<i>(Te faltan {(live_clause - my_money):,} € para poder pagarla).</i>",
                     reply_markup=ui.action_success_keyboard("clause")
                 )
+                return
+
+            if not confirmed:
+                text = ui.clause_confirm_text(pname, pos, target_owner, live_clause, my_money)
+                markup = ui.clause_confirm_keyboard(player_id, live_clause)
+                if message_id:
+                    self.edit_message_text(chat_id, message_id, text, reply_markup=markup)
+                else:
+                    self.send_message(chat_id, text, reply_markup=markup)
+                return
+            if live_clause > amount:
+                self.send_message(
+                    chat_id,
+                    f"⚠️ La cláusula de <b>{ui.h(pname)}</b> ha subido a <b>{live_clause:,} €</b> "
+                    f"(confirmaste {amount:,} €). No se ha pagado nada.",
+                    reply_markup=ui.action_success_keyboard("clause"))
                 return
 
             # Execute buyout with exact live clause

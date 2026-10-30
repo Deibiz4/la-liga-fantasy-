@@ -5,19 +5,45 @@ opportunities by cross-referencing rival players' buyout clauses with FutbolFant
 real-time market trend trajectories, player points, and protection ratios.
 """
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
-from ..matching import match_name, POS
+from ..matching import ff_team_map, match_name, POS
 from ..sources.market_trends import trends_index
 from .flip import daily_rate, project, DEFAULT_HORIZON, SELL_COMMISSION, SANITY_MAX_DIFF
+
+MIN_START_PROB = 40   # below this a stolen player sits on the bench: points and value stall
+_PLAYABLE = ("ok", "doubtful")
+
+
+def locked_until(player: Dict[str, Any], now: Optional[datetime] = None) -> Optional[datetime]:
+    """When the clause opens, or None if it can be paid right now."""
+    raw = player.get("buyoutClauseLockedEndTime")
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt if dt > (now or datetime.now(timezone.utc)) else None
 
 
 def evaluate_rival_player(
     player: Dict[str, Any],
     manager_info: Dict[str, Any],
     index: Dict[str, Any],
-    horizon: int = DEFAULT_HORIZON
+    horizon: int = DEFAULT_HORIZON,
+    prob_index: Optional[Dict[str, Any]] = None,
+    team: Optional[str] = None,
+    now: Optional[datetime] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Evaluates a single player from a rival squad for a potential clause buyout / flip."""
+    """Evaluates a single player from a rival squad for a potential clause buyout / flip.
+
+    `prob_index` (futbolfantasy probable lineups) and `team` (his futbolfantasy team
+    slug, to break ambiguous names) add the chance of starting: a benchwarmer's value
+    doesn't rise, so a cheap clause on him is not a steal.
+    """
     pm = player.get("playerMaster") or {}
     player_id = pm.get("id")
     if not player_id:
@@ -86,6 +112,19 @@ def evaluate_rival_player(
         badge = "⚪ ESTABLE"
         verdict = "Sin diferencial de valor inmediato."
 
+    # Will he play? A stolen player who doesn't start neither scores nor appreciates.
+    info = match_name(nickname, full_name, prob_index, team=team) if prob_index else None
+    prob = info.get("prob") if info else None
+    injured = (pm.get("playerStatus") or "ok") not in _PLAYABLE or bool(
+        info and (info.get("lesionado") or not info.get("disponible", True)))
+    if injured:
+        plays = False
+    elif info is None:
+        plays = True            # not on futbolfantasy: no evidence against him
+    else:
+        plays = prob is not None and prob >= MIN_START_PROB
+    unlock = locked_until(player, now)
+
     # Composite Steal Score (higher is better)
     # Rewards positive ROI, high daily rise, low clause ratio and good points
     steal_score = (margin_pct * 3.0) + (rate / 4_000.0) - (clause_ratio * 15.0)
@@ -93,6 +132,10 @@ def evaluate_rival_player(
         steal_score += 20.0
     if clause_ratio <= 1.25:
         steal_score += 15.0
+    if prob is not None:
+        steal_score += (prob - 50) * 0.6
+    if not plays:
+        steal_score -= 50.0
 
     return {
         "player_id": player_id,
@@ -117,6 +160,10 @@ def evaluate_rival_player(
         "badge": badge,
         "verdict": verdict,
         "steal_score": round(steal_score, 1),
+        "prob": prob,
+        "injured": injured,
+        "plays": plays,
+        "locked_until": unlock,
     }
 
 
@@ -126,11 +173,19 @@ def find_rival_clause_flips(
     horizon: int = DEFAULT_HORIZON,
     min_daily_rise: int = 0,
     manager_query: Optional[str] = None,
-    owned_ids: Optional[Set[Any]] = None
+    owned_ids: Optional[Set[Any]] = None,
+    prob_index: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    """Scans all rival teams in the league and returns ranked clause flip/robbery targets."""
+    """Scans all rival teams in the league and returns ranked clause flip/robbery targets.
+
+    Ranking: clauses payable now before locked ones, players who start before
+    benchwarmers/injured, then profitable flips, then steal score.
+    """
     teams = client.league_teams(league_id) or []
     index = trends_index()
+    # league squads carry teamId only, no team slug
+    team_map = ff_team_map([p.get("playerMaster") or {} for t in teams
+                            for p in t.get("players") or []], prob_index or {})
 
     # Identify user's own team or player IDs to exclude
     owned: Set[Any] = set(owned_ids) if owned_ids else set()
@@ -173,12 +228,15 @@ def find_rival_clause_flips(
             if not pid or pid in owned or str(pid) in owned:
                 continue
 
-            evaluated = evaluate_rival_player(p, mgr_info, index, horizon)
+            team = team_map.get(str((p.get("playerMaster") or {}).get("teamId")))
+            evaluated = evaluate_rival_player(p, mgr_info, index, horizon,
+                                              prob_index=prob_index, team=team)
             if evaluated is not None:
                 if min_daily_rise > 0 and evaluated["rate_dia"] < min_daily_rise:
                     continue
                 candidates.append(evaluated)
 
     # Sort primarily by steal_score (or margin_pct if profitable)
-    candidates.sort(key=lambda x: (x["margin_pct"] > 0, x["steal_score"], x["rate_dia"]), reverse=True)
+    candidates.sort(key=lambda x: (x["locked_until"] is None, x["plays"], x["margin_pct"] > 0,
+                                   x["steal_score"], x["rate_dia"]), reverse=True)
     return candidates
